@@ -3,25 +3,6 @@
 
 #include "libarray.h"
 
-void shuffle_guesses_array(int *arr)
-{
-    for (int i = 0; i < GUESSES_SIZE - 1; i++)
-    {
-        size_t j = i + rand() / (RAND_MAX / (GUESSES_SIZE - i) + 1);
-        int t = arr[j];
-        arr[j] = arr[i];
-        arr[i] = t;
-    }
-}
-
-void build_guesses_array(int *arr)
-{
-    for (int i = 0; i < GUESSES_SIZE; i++)
-    {
-        arr[i] = i + 1;
-    }
-}
-
 int ll_init(linked_list_t **l)
 {
     *l = malloc(sizeof(linked_list_t));
@@ -32,77 +13,82 @@ int ll_init(linked_list_t **l)
 
     (*l)->size = 0;
     (*l)->head = NULL;
-    (*l)->tail = NULL;
     return 0;
 }
 
-int ll_push(linked_list_t **l, node_t *node)
+int ll_insert(linked_list_t **l, void *value)
 {
-    if (node == NULL)
+    node_t *new, *temp;
+    new = (node_t *)malloc(sizeof(node_t));
+    if (new == NULL)
     {
-        return (*l)->size;
+        return -1;
     }
-
-    if ((*l)->head == NULL)
+    new->value = value;
+    new->next = NULL;
+    temp = (*l)->head;
+    printf("inserted0\n");
+    if (temp == NULL)
     {
-        (*l)->head = node;
-        (*l)->tail = node;
-        (*l)->size = 1;
-        return (*l)->size;
+        temp = new;
+        printf("inserted1\n");
     }
-
-    (*l)->tail->next = node;
-    (*l)->tail = node;
-    (*l)->size += 1;
-    return (*l)->size;
+    else
+    {
+        while (temp->next != NULL)
+        {
+            temp = temp->next;
+        }
+        temp->next = new;
+        printf("inserted2\n");
+    }
+    (*l)->size = (*l)->size + 1;
+    printf("inserted3, size: %d\n", (*l)->size);
+    return 0;
 }
 
-// void *ll_remove(linked_list_t **t, void *value)
-// {
-//     if ((*t)->size == 0)
-//         return;
-
-//     node_t *aux;
-//     aux = (*t)->head;
-//     while (aux->next != value)
-//     {
-//         aux = aux->next;
-//     }
-
-//     aux->next = aux->next->next;
-//     free(aux->next);
-//     (*t)
-//                 void *value = NULL;
-//     node_t *tmp = NULL;
-//     value = (*t)->head->value;
-//     tmp = (*t)->head;
-//     (*t)->head = (*t)->head->next;
-//     (*t)->size -= 1;
-//     free(tmp);
-//     return value;
-// }
-
-void ll_free(linked_list_t **t)
+int ll_delete_value(linked_list_t **l, void *value)
 {
-    if (*t == NULL)
-        return;
-
-    while ((*t)->head != NULL)
+    if ((*l)->head == NULL)
     {
-        node_t *tmp = (*t)->head;
-        (*t)->head = (*t)->head->next;
-        if (tmp->value != NULL)
+        return -1;
+    }
+
+    node_t *cur = (*l)->head;
+    node_t *prev = NULL;
+    while (cur->value != value)
+    {
+        prev = cur;
+        cur = cur->next;
+    }
+
+    if (prev != NULL)
+    {
+        prev->next = cur->next;
+    }
+    free(cur);
+    (*l)->size -= 1;
+    return 0;
+}
+
+
+int ll_free(linked_list_t **l)
+{
+    if (*l == NULL)
+        return -1;
+
+    while ((*l)->head != NULL)
+    {
+        node_t *temp = (*l)->head;
+        (*l)->head = (*l)->head->next;
+        if (temp->value != NULL)
         {
-            free(tmp->value);
+            free(temp->value);
         }
 
-        free(tmp);
+        free(temp);
     }
 
-    if ((*t)->tail != NULL)
-    {
-        free((*t)->tail);
-    }
-
-    free((*t));
+    free((*l));
+    return 0;
 }

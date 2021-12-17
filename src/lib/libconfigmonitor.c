@@ -9,16 +9,16 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "libcom.h"
 #include "libconfigmonitor.h"
 #include "libconfigserver.h"
 #include "libio.h"
 #include "liblog.h"
 #include "libutil.h"
-#include "libcom.h"
 
 // Monitor defaults
 #define DEFAULT_ARRIVAL_TIME 300
-#define DEFAULT_PLAYERS 5
+#define DEFAULT_THREADS 5
 
 // Closes the monitor log file, and frees the memory taken by the monitor
 int clean_monitor(monitor_t *monitor)
@@ -26,7 +26,7 @@ int clean_monitor(monitor_t *monitor)
     log_info(monitor->log_file, "Shutting down");
     close(monitor->socket_fd);
     free(monitor->config);
-    free(monitor->players);
+    free(monitor->threads);
     if (fclose(monitor->log_file) != 0)
     {
         return -1;
@@ -58,9 +58,8 @@ int initialize_monitor(monitor_t **monitor)
 
     // Sets the monitor configuration values to the default ones
     (*monitor)->config->arrival_time_ms = DEFAULT_ARRIVAL_TIME;
-    (*monitor)->config->players = DEFAULT_PLAYERS;
+    (*monitor)->config->threads = DEFAULT_THREADS;
     rand_string((*monitor)->config->name, 20);
-    (*monitor)->current_guess_index = 0;
 
     // Initialize monitor structure socket
     if (((*monitor)->socket_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
@@ -103,7 +102,7 @@ void parse_monitor_config(char *buffer, monitor_t **monitor)
             continue;
         }
 
-        if (sscanf(line, "players = %u", &(*monitor)->config->players) == 1)
+        if (sscanf(line, "threads = %u", &(*monitor)->config->threads) == 1)
         {
             line = strtok(NULL, "\n");
             continue;
@@ -117,13 +116,4 @@ void parse_monitor_config(char *buffer, monitor_t **monitor)
     }
 
     free(line);
-}
-
-// Prints the monitor configurations
-void print_monitor_config(monitor_t *monitor)
-{
-    printf("Name: %s | Arrival time (ms): %u | Players per team: %u\n",
-           monitor->config->name,
-           monitor->config->arrival_time_ms,
-           monitor->config->players);
 }

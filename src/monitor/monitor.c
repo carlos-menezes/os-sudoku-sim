@@ -1,18 +1,19 @@
-#include <time.h>
 #include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "monitor.h"
 
+#include "libarray.h"
+#include "libconfigmonitor.h"
 #include "libio.h"
 #include "liblog.h"
-#include "libconfigmonitor.h"
-#include "libarray.h"
 
-monitor_t* monitor;
-int guesses[GUESSES_SIZE];
+monitor_t *monitor;
 
-void* init_game_for_thread(void* thread_id) {
-    int id = (int*)thread_id;
+void *init_game_for_thread(void *thread_id)
+{
+    int id = (int *)thread_id;
     log_info(monitor->log_file, "INIT GAME | THREAD=%d", id);
     while (1)
     {
@@ -22,41 +23,45 @@ void* init_game_for_thread(void* thread_id) {
     pthread_exit(NULL);
 }
 
-void spawn_players() {
-    monitor->players = malloc(sizeof(pthread_t) * monitor->config->players);
-    for (size_t i = 0; i < monitor->config->players; i++)
+void spawn_threads()
+{
+    monitor->threads = malloc(sizeof(pthread_t) * monitor->config->threads);
+    for (size_t i = 0; i < monitor->config->threads; i++)
     {
-        if (pthread_create(monitor->players + i, NULL, init_game_for_thread, (void*)i) == -1) {
+        if (pthread_create(monitor->threads + i, NULL, init_game_for_thread, (void *)i) == -1)
+        {
             log_fatal(monitor->log_file, "Failed to create thread #%d", i);
         }
     }
 }
 
-void handle_communication() {
+void handle_communication()
+{
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     time_t t;
     srand((unsigned)time(&t));
 
     if (argc == 1)
     { // User does not input server configuration file
         log_fatal(NULL, "monitor <config>");
-        return -1;
+        exit(EXIT_FAILURE);
     }
 
     char *file_buffer;
     if (io_file_read(argv[1], &file_buffer) == -1)
     {
         log_fatal(NULL, "Failed to read file %s", argv[1]);
-        return -1;
+        exit(EXIT_FAILURE);
     }
 
     // Initialize monitor
     if (initialize_monitor(&monitor) == -1)
     {
         log_fatal(NULL, "Failed to initialize monitor");
-        return -1;
+        exit(EXIT_FAILURE);
     }
 
     // Parses monitor configuration file, and saves the settings to the monitor
@@ -66,15 +71,17 @@ int main(int argc, char *argv[]) {
     log_info(monitor->log_file, "Initialized monitor (ID: %s)", monitor->config->name);
 
     // Connect to server
-    if (connect(monitor->socket_fd, (struct sockaddr *)&(monitor->socket_address), sizeof(monitor->socket_address)) == -1)
+    if (connect(monitor->socket_fd, (struct sockaddr *)&(monitor->socket_address), sizeof(monitor->socket_address)) ==
+        -1)
     {
         log_fatal(monitor->log_file, "Cannot connect to server");
-        return -1;
+        exit(EXIT_FAILURE);
     }
+    log_info(monitor->log_file, "Connected to server");
 
-    build_guesses_array(&guesses);
-    shuffle_guesses_array(&guesses);
-    spawn_players();
-    handle_communication();
+    spawn_threads();
+    log_info(monitor->log_file, "All initializations succeeded");
+
+    // handle_communication();
     return 0;
 }
