@@ -7,7 +7,7 @@ static const char *levels[] = {
     "INFO", "ERROR", "FATAL"
 };
 
-static void stdout_callback(log_event* e) {
+static void stdout_callback(struct log_event* e) {
     char buf[16];
     buf[strftime(buf, sizeof(buf), "%H:%M:%S", e->time)] = '\0';
     printf("%s %s: ", buf, levels[e->level]);
@@ -15,7 +15,7 @@ static void stdout_callback(log_event* e) {
     printf("\n");
 }
 
-static void file_callback(log_event* e) {
+static void file_callback(struct log_event* e) {
     char buf[16];
     buf[strftime(buf, sizeof(buf), "%H:%M:%S", e->time)] = '\0';
     fprintf(e->file, "%s %s: ", buf, levels[e->level]);
@@ -29,7 +29,7 @@ const char* log_level_str(int level) {
 }
 
 void log_info(FILE *file, const char *fmt, ...) {
-    log_event e = {
+    struct log_event e = {
         .fmt = fmt,
         .file = file,
         .level = LOG_INFO
@@ -49,7 +49,7 @@ void log_info(FILE *file, const char *fmt, ...) {
 }
 
 void log_error(FILE *file, const char *fmt, ...) {
-    log_event e = {
+    struct log_event e = {
         .fmt = fmt,
         .file = file,
         .level = LOG_ERROR
@@ -69,7 +69,7 @@ void log_error(FILE *file, const char *fmt, ...) {
 }
 
 void log_fatal(FILE *file, const char *fmt, ...) {
-    log_event e = {
+    struct log_event e = {
         .fmt = fmt,
         .file = file,
         .level = LOG_ERROR

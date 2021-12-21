@@ -7,26 +7,26 @@
 
 #define MAX_MONITOR_NAME 20
 
-typedef struct MonitorConfig
+struct monitor_config_t
 {
     unsigned int arrival_time_ms;
     unsigned int threads;
     char name[MAX_MONITOR_NAME];
-} monitor_config_t;
+};
 
 // Monitor log file, configurations, player threads, socket and socket_address
-typedef struct Monitor
+struct monitor_t
 {
     FILE *log_file;
-    monitor_config_t *config;
+    struct monitor_config_t *config;
     pthread_t *threads;
 
     int socket_fd;
     struct sockaddr_in socket_address;
-} monitor_t;
+};
 
-int initialize_monitor(monitor_t **monitor);
-void parse_monitor_config(char *buffer, monitor_t **monitor);
-int clean_monitor(monitor_t *monitor);
+int initialize_monitor(struct monitor_t** monitor);
+void parse_monitor_config(char *buffer, struct monitor_t** monitor);
+int clean_monitor(struct monitor_t* monitor);
 
 #endif

@@ -1,22 +1,21 @@
 #ifndef LIBARRAY_H
 #define LIBARRAY_H
 
-typedef struct Node
+struct node_t
 {
     void *value;
-    struct Node *next;
-} node_t;
+    struct node_t *next;
+};
 
-typedef struct LinkedList
+struct linked_list_t
 {
     int size;
-    node_t *head;
-} linked_list_t;
+    struct node_t *head;
+};
 
-int ll_init(linked_list_t **l);
-// int ll_insert_first(linked_list_t **l, void* value);
-int ll_insert(linked_list_t **l, void *value);
-int ll_delete_value(linked_list_t **l, void *value);
-int ll_free(linked_list_t **l);
+int ll_init(struct linked_list_t **l);
+int ll_insert(struct linked_list_t **l, void *value);
+int ll_delete_value(struct linked_list_t **l, void *value);
+int ll_free(struct linked_list_t **l);
 
 #endif

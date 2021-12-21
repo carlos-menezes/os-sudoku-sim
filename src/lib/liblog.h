@@ -3,13 +3,13 @@
 
 #include <stdio.h>
 
-typedef struct {
+struct log_event {
     va_list args;
     struct tm *time;
     int level;
     FILE* file;
     const char* fmt;
-} log_event;
+};
 
 enum { LOG_INFO, LOG_ERROR, LOG_FATAL };
 

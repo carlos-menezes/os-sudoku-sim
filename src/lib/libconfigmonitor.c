@@ -21,7 +21,7 @@
 #define DEFAULT_THREADS 5
 
 // Closes the monitor log file, and frees the memory taken by the monitor
-int clean_monitor(monitor_t *monitor)
+int clean_monitor(struct monitor_t *monitor)
 {
     log_info(monitor->log_file, "Shutting down");
     close(monitor->socket_fd);
@@ -36,16 +36,16 @@ int clean_monitor(monitor_t *monitor)
 }
 
 // Creates the monitor's log file, initializes the monitor socket, and sets the configurations to the default values
-int initialize_monitor(monitor_t **monitor)
+int initialize_monitor(struct monitor_t **monitor)
 {
     // Allocate memory for the monitor structure
-    *monitor = malloc(sizeof(monitor_t));
+    *monitor = (struct monitor_t*)malloc(sizeof(struct monitor_t));
     if ((*monitor) == NULL)
     { // Verify if memory was correctly allocated
         return -1;
     }
     // Allocate memory for the monitor configuration structure
-    (*monitor)->config = calloc(1, sizeof(monitor_config_t));
+    (*monitor)->config = calloc(1, sizeof(struct monitor_config_t));
     if ((*monitor)->config == NULL)
     { // Verify if memory was correctly allocated
         return -1;
@@ -75,7 +75,7 @@ int initialize_monitor(monitor_t **monitor)
 }
 
 // Parses the monitor configuration file, and saves it to the monitor structure
-void parse_monitor_config(char *buffer, monitor_t **monitor)
+void parse_monitor_config(char *buffer, struct monitor_t **monitor)
 {
     char *line = strtok(strdup(buffer), "\n");
     while (line)

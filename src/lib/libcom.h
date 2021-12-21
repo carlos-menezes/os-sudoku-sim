@@ -12,29 +12,31 @@ typedef enum
 } MONITOR_MESSAGE_TYPE;
 
 #pragma pack(1)
-typedef struct MonitorMsg
+struct monitor_msg_t
 {
     MONITOR_MESSAGE_TYPE type;
     unsigned int guess;
     unsigned int thread_id;
+    unsigned int socket_fd;
     char monitor[MAX_MONITOR_NAME];
-} monitor_msg_t;
+};
 #pragma pack(0)
 
 typedef enum
 {
+    SERV_MSG_START,
     SERV_MSG_OK,
     SERV_MSG_ERR,
     SERV_MSG_END
 } SERVER_MESSAGE_TYPE;
 
 #pragma pack(1)
-typedef struct ServerMsg
+struct server_msg_t
 {
     SERVER_MESSAGE_TYPE type;
     unsigned int thread_id;
     unsigned int guess;
-} server_msg_t;
+};
 #pragma pack(0)
 
 #endif

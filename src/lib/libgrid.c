@@ -5,7 +5,7 @@
 #include "libio.h"
 #include "libconfigserver.h"
 
-int load_grids(server_t** s) {
+int load_grids(struct server_t** s) {
     char* buf;
     if(io_file_read(GRIDS_FILE, &buf) == -1) {
         return -1;

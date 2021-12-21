@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <string.h>
+#include <signal.h>
+#include <stdio.h>
 
 #include "monitor.h"
 
@@ -8,18 +11,31 @@
 #include "libconfigmonitor.h"
 #include "libio.h"
 #include "liblog.h"
+#include "libcom.h"
 
-monitor_t *monitor;
+struct monitor_t *monitor;
+pthread_mutex_t monitor_mutex;
+volatile sig_atomic_t keep_running = 1;
 
 void *init_game_for_thread(void *thread_id)
 {
-    int id = (int *)thread_id;
-    log_info(monitor->log_file, "INIT GAME | THREAD=%d", id);
-    while (1)
-    {
-        log_info(monitor->log_file, "SLEEP | THREAD=%d", id);
-        usleep(1000000);
-    }
+    log_info(monitor->log_file, "INIT GAME | THREAD=%d", thread_id);
+    // monitor_msg_t out_msg;
+    // strncpy(out_msg.monitor, monitor->config->name, MAX_MONITOR_NAME);
+    // out_msg.thread_id = (int*)thread_id;
+    // out_msg.type = MON_MSG_INIT;
+
+    // if (send(monitor->socket_fd, &out_msg, sizeof(monitor_msg_t), 0) == -1) {
+    //     log_error(monitor->log_file, "SEND ERROR, EXIT PROCESS | THREAD=%d", thread_id);
+    // } else {
+    //     log_info(monitor->log_file, "SEND OK | THREAD=%d TYPE=%u", thread_id, out_msg.type);
+    //     while (1)
+    //     {
+    //         // recv loop
+    //         usleep(1000000);
+    //     }
+    // }
+
     pthread_exit(NULL);
 }
 
@@ -37,12 +53,60 @@ void spawn_threads()
 
 void handle_communication()
 {
+    while (keep_running)
+    {
+        /* code */
+    }
+    
+}
+
+/**
+ * `handle_handshake()` sends the initial message with the intent to start playing and waits for a response from the server, indicating that the threads can be spawned and, thus, guesses can be sent via the socket.
+ */
+
+int handle_handshake() {
+    struct monitor_msg_t out_msg;
+    strncpy(out_msg.monitor, monitor->config->name, MAX_MONITOR_NAME);
+    out_msg.type = MON_MSG_INIT;
+    if (send(monitor->socket_fd, &out_msg, sizeof(struct monitor_msg_t), 0) == -1) {
+        log_error(monitor->log_file, "SEND INIT ERROR");
+        return -1;
+    }
+    log_info(monitor->log_file, "SEND INIT OK, WAIT RECV");
+    struct server_msg_t in_msg;
+    if (recv(monitor->socket_fd, &in_msg, sizeof(struct server_msg_t), 0) == -1) {
+        log_error(monitor->log_file, "RECV INIT ERROR");
+        return -1;
+    } else {
+        log_info(monitor->log_file, "RECV INIT OK");
+    }
+    return 0;
+}
+
+void termination_handler(int _)
+{
+    keep_running = 0;
+
+    for (size_t i = 0; i < monitor->config->threads; i++)
+    {
+        pthread_cancel(monitor->threads + i);
+    }
+    
+    clean_monitor(monitor);
+    exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char *argv[])
 {
     time_t t;
     srand((unsigned)time(&t));
+
+    struct sigaction sa;
+    sa.sa_handler = termination_handler;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
+
+    pthread_mutex_init(&monitor_mutex, NULL);
 
     if (argc == 1)
     { // User does not input server configuration file
@@ -79,9 +143,13 @@ int main(int argc, char *argv[])
     }
     log_info(monitor->log_file, "Connected to server");
 
-    spawn_threads();
-    log_info(monitor->log_file, "All initializations succeeded");
+    if (handle_handshake() == -1) {
+        log_error(monitor->log_file, "Failed to send init message");
+        exit(EXIT_FAILURE);
+    };
 
-    // handle_communication();
+    spawn_threads();
+
+    handle_communication();
     return 0;
 }

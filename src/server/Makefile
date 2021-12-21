@@ -1,6 +1,6 @@
 CC := gcc
 INC := -I../lib/
-CFLAGS := -Wall $(INC)
+CFLAGS := -std=gnu99 -Wall $(INC)
 LIBS := -lpthread
 EXEC := server
 UTILS := $(wildcard ../lib/*.c)

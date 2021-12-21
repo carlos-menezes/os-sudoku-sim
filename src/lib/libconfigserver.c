@@ -15,7 +15,7 @@
 #include "libcom.h"
 
 // Closes the server log file, and frees the memory taken by the server
-int clean_server(server_t *server)
+int clean_server(struct server_t* server)
 {
     log_info(server->log_file, "Shutting down");
     close(server->socket_fd);
@@ -29,15 +29,15 @@ int clean_server(server_t *server)
 }
 
 // Creates the server's log file, and sets the configurations to the default values
-int initialize_server(server_t **server)
+int initialize_server(struct server_t* *server)
 {
-    *server = malloc(sizeof(server_t));
+    *server = (struct server_t*)malloc(sizeof(struct server_t));
     if ((*server) == NULL)
     {
         return -1;
     }
 
-    (*server)->config = calloc(1, sizeof(server_config_t));
+    (*server)->config = calloc(1, sizeof(struct server_config_t));
     if ((*server)->config == NULL)
     {
         return -1;
@@ -62,6 +62,7 @@ int initialize_server(server_t **server)
     (*server)->socket_address.sin_addr.s_addr = INADDR_ANY;
     (*server)->socket_address.sin_port = htons(DEFAULT_PORT);
 
+    setsockopt((*server)->socket_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
     if ((bind((*server)->socket_fd, (struct sockaddr *)&(*server)->socket_address, sizeof((*server)->socket_address))) == -1)
     {
         log_fatal(NULL, "Failed to bind");
@@ -73,12 +74,18 @@ int initialize_server(server_t **server)
 };
 
 // Reads the configuration file, and sets the configurations to those new values
-void parse_server_config(char *buffer, server_t **server)
+void parse_server_config(char *buffer, struct server_t* *server)
 {
     char *line = strtok(strdup(buffer), "\n");
     while (line)
     {
         if (sscanf(line, "socket_backlog = %u", &(*server)->config->socket_backlog) == 1)
+        {
+            line = strtok(NULL, "\n");
+            continue;
+        }
+
+        if (sscanf(line, "min_monitors = %u", &(*server)->config->min_monitors) == 1)
         {
             line = strtok(NULL, "\n");
             continue;
