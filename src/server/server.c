@@ -57,6 +57,7 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
     switch (msg->type)
     {
     case MON_MSG_INIT:
+        log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s TYPE=MON_MSG_INIT", msg->monitor);
         struct monitor_state_t *state;
         state = (struct monitor_state_t *)malloc(sizeof(struct monitor_state_t));
         strncpy(state->monitor, msg->monitor, MAX_MONITOR_NAME);
@@ -65,10 +66,13 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
         pthread_mutex_lock(&game_info_mutex);
         ll_insert(&(game_info.states), state);
         pthread_mutex_unlock(&game_info_mutex);
-        log_info(server->log_file, "HANDLED INIT MSG | MONITOR=%s", msg->monitor);
+        log_info(server->log_file, "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_INIT", msg->monitor);
         break;
-    
+    case MON_MSG_GUESS:
+        log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u", msg->monitor, msg->guess);
+        log_info(server->log_file, "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u", msg->monitor, msg->guess);
     default:
+
         break;
     }
 }
@@ -85,15 +89,19 @@ void *handle_monitor(void *socket_fd)
         if (recv((int *)socket_fd, in_message, sizeof(struct monitor_msg_t), 0) <= 0) {
             break;
         }
-        in_message->socket_fd = (int*)socket_fd;
+        in_message->socket_fd = (unsigned int*)socket_fd;
         switch (in_message->type)
         {
         case MON_MSG_INIT:
+            pthread_mutex_lock(&init_requests_mutex);
             ll_insert(&init_requests, in_message);
+            pthread_mutex_unlock(&init_requests_mutex);
             log_info(server->log_file, "RECV OK | NAME=%s TYPE=MON_MSG_INIT", in_message->monitor);
             break;
         case MON_MSG_GUESS:
-            ll_insert(&(requests), requests);
+            pthread_mutex_lock(&requests_mutex);
+            ll_insert(&requests, in_message);
+            pthread_mutex_unlock(&requests_mutex);
             log_info(server->log_file, "RECV OK | NAME=%s TYPE=MON_MSG_GUESS THREAD=%u", in_message->monitor, in_message->thread_id);
             break;
         }
@@ -110,10 +118,8 @@ void* init_dispatch() {
             pthread_mutex_lock(&init_requests_mutex);
             struct node_t* current = init_requests;
             if (current != NULL) {
-                log_info(server->log_file, "HERE | MONITOR=%s COUNT=%d", ((struct monitor_msg_t*)(current->value))->monitor, count);
                 count += 1;
                 struct monitor_msg_t* msg = (struct monitor_msg_t*)(current->value);
-                log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s", msg->monitor);
                 handle_monitor_message(msg);
                 ll_delete_value(&init_requests, current->value);
                 pthread_mutex_unlock(&init_requests_mutex);
@@ -158,7 +164,11 @@ void *dispatch()
     int count = 0;
     while (keep_running)
     {
-        log_info(server->log_file, "DISPATCH START | BATCH=%d", server->config->dispatch_batch);
+        pthread_mutex_lock(&init_requests_mutex);
+        pthread_mutex_lock(&requests_mutex);
+        log_info(server->log_file, "DISPATCH START | BATCH=%d INIT_REQUESTS=%d REQUESTS=%d", server->config->dispatch_batch, ll_size(init_requests), ll_size(requests));
+        pthread_mutex_unlock(&init_requests_mutex);
+        pthread_mutex_unlock(&requests_mutex);
         while (count < server->config->dispatch_batch) {
             count += 1;
             pthread_mutex_lock(&init_requests_mutex);
@@ -181,6 +191,7 @@ void *dispatch()
             }
             pthread_mutex_unlock(&init_requests_mutex);
 
+            // requests works in priority
             pthread_mutex_lock(&requests_mutex);
             if (ll_size(requests) > 0)
             {

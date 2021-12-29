@@ -93,7 +93,7 @@ void parse_server_config(char *buffer, struct server_t* *server)
             continue;
         }
 
-        if (sscanf(line, "dispatch_batch = %d", &(*server)->config->dispatch_batch)) {
+        if (sscanf(line, "process_batch = %d", &(*server)->config->dispatch_batch)) {
             line = strtok(NULL, "\n");
             continue;
         }

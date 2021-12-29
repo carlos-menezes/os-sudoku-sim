@@ -18,9 +18,6 @@ void rand_string(char *str, size_t size)
 
 int rand_int(int lower, int upper)
 {
-    time_t t;
-    srand((unsigned)time(&t));
-
     int number = (rand() % (upper - lower + 1)) + lower;
     return number;
 }

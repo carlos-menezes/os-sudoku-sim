@@ -12,6 +12,7 @@
 #include "libio.h"
 #include "liblog.h"
 #include "libcom.h"
+#include "libutil.h"
 
 struct monitor_t *monitor;
 pthread_mutex_t monitor_mutex;
@@ -20,21 +21,21 @@ volatile sig_atomic_t keep_running = 1;
 void *init_game_for_thread(void *thread_id)
 {
     log_info(monitor->log_file, "INIT GAME | THREAD=%d", thread_id);
-    // monitor_msg_t out_msg;
-    // strncpy(out_msg.monitor, monitor->config->name, MAX_MONITOR_NAME);
-    // out_msg.thread_id = (int*)thread_id;
-    // out_msg.type = MON_MSG_INIT;
+    while (keep_running) {
+        struct monitor_msg_t out_msg;
+        strncpy(out_msg.monitor, monitor->config->name, MAX_MONITOR_NAME);
+        out_msg.thread_id = (unsigned int *)thread_id;
+        out_msg.type = MON_MSG_GUESS;
+        out_msg.guess = rand_int(0, 9);
 
-    // if (send(monitor->socket_fd, &out_msg, sizeof(monitor_msg_t), 0) == -1) {
-    //     log_error(monitor->log_file, "SEND ERROR, EXIT PROCESS | THREAD=%d", thread_id);
-    // } else {
-    //     log_info(monitor->log_file, "SEND OK | THREAD=%d TYPE=%u", thread_id, out_msg.type);
-    //     while (1)
-    //     {
-    //         // recv loop
-    //         usleep(1000000);
-    //     }
-    // }
+        if (send(monitor->socket_fd, &out_msg, sizeof(struct monitor_msg_t), 0) == -1) {
+            log_error(monitor->log_file, "SEND ERROR, EXIT PROCESS | THREAD=%u", out_msg.thread_id);
+        } else {
+            log_info(monitor->log_file, "SEND OK | THREAD=%u TYPE=MON_MSG_GUESS GUESS=%u", out_msg.thread_id, out_msg.guess);
+        }
+
+        usleep(monitor->config->arrival_time_ms + rand_int(500000, 1000000)); // +/- 500ms
+    }
 
     pthread_exit(NULL);
 }
