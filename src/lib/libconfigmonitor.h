@@ -6,6 +6,8 @@
 #include <stdio.h>
 
 #define MAX_MONITOR_NAME 20
+#define DEFAULT_ARRIVAL_TIME 300
+#define DEFAULT_THREADS 5
 
 struct monitor_config_t
 {

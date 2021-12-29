@@ -7,15 +7,9 @@ struct node_t
     struct node_t *next;
 };
 
-struct linked_list_t
-{
-    int size;
-    struct node_t *head;
-};
-
-int ll_init(struct linked_list_t **l);
-int ll_insert(struct linked_list_t **l, void *value);
-int ll_delete_value(struct linked_list_t **l, void *value);
-int ll_free(struct linked_list_t **l);
+int ll_init(struct node_t **head);
+int ll_insert(struct node_t **head, void *value);
+int ll_delete_value(struct node_t **head, void *value);;
+int ll_size(struct node_t *head);
 
 #endif

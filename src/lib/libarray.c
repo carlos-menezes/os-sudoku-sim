@@ -3,31 +3,18 @@
 
 #include "libarray.h"
 
-int ll_init(struct linked_list_t **l)
+int ll_insert(struct node_t **head, void *value)
 {
-    *l = malloc(sizeof(struct linked_list_t));
-    if (*l == NULL)
-    {
-        return -1;
-    }
-
-    (*l)->size = 0;
-    return 0;
-}
-
-int ll_insert(struct linked_list_t **l, void *value)
-{
-    if ((*l)->head == NULL) { // Insert @ head
-        (*l)->head = malloc(sizeof(struct node_t));
-        (*l)->head->next = NULL;
-        (*l)->head->value = value;
-        (*l)->size += 1;
+    // If the list is empty
+    if ((*head) == NULL) {
+        (*head) = malloc(sizeof(struct node_t));
+        (*head)->value = value;
+        (*head)->next = NULL;
         return 0;
     }
 
-    struct node_t *cur = (*l)->head, *prev;
+    struct node_t *cur = (*head);
     while (cur->next != NULL) {
-        prev = cur;
         cur = cur->next;
     }
 
@@ -36,24 +23,21 @@ int ll_insert(struct linked_list_t **l, void *value)
 	if (new == NULL) {
 		return -1;
 	}
+
 	new->next = NULL;
 	new->value = value;
 
 	cur->next = new;
-    (*l)->size += 1;
     return 0;
 }
 
-int ll_delete_value(struct linked_list_t **l, void *value)
+int ll_delete_value(struct node_t **head, void *value)
 {
-    // Store head node
-    struct node_t *temp = (*l)->head, *prev;
- 
-    // If head node itself holds the key to be deleted
+    struct node_t *temp = *head, *prev;
+    // If the head node itself holds the key to be deleted
     if (temp != NULL && temp->value == value) {
-        (*l)->head = temp->next; // Changed head
-        free(temp); // free old head
-        (*l)->size -= 1;
+        (*head) = temp->next; // Changed head
+        free(temp);
         return 0;
     }
 
@@ -63,7 +47,7 @@ int ll_delete_value(struct linked_list_t **l, void *value)
         prev = temp;
         temp = temp->next;
     }
- 
+
     // If key was not present in linked list, this shouldn't happen anyway
     if (temp == NULL)
         return -1;
@@ -71,28 +55,34 @@ int ll_delete_value(struct linked_list_t **l, void *value)
     // Unlink the node from linked list
     prev->next = temp->next;
     free(temp);
-    (*l)->size -= 1;
     return 1;
 }
 
 
-int ll_free(struct linked_list_t **l)
+int ll_free(struct node_t **head)
 {
-    if (*l == NULL)
+    if ((*head) == NULL)
         return -1;
 
-    while ((*l)->head != NULL)
+    struct node_t* tmp;
+
+    while ((*head) != NULL)
     {
-        struct node_t *temp = (*l)->head;
-        (*l)->head = (*l)->head->next;
-        if (temp->value != NULL)
-        {
-            free(temp->value);
-        }
-
-        free(temp);
+       tmp = (*head);
+       (*head) = (*head)->next;
+       free(tmp);
     }
-
-    free((*l));
     return 0;
+}
+
+int ll_size(struct node_t* head) {
+    struct node_t* tmp = head;
+    int count = 0;
+
+    while (tmp != NULL)
+    {
+       count += 1;
+       tmp = tmp->next;
+    }
+    return count;
 }

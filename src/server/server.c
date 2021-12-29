@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <semaphore.h>
 
 #include "server.h"
 
@@ -19,15 +20,18 @@
 #include "libutil.h"
 
 struct server_t *server;
-pthread_mutex_t server_mutex;
+struct game_state_t game_info;
+pthread_mutex_t game_info_mutex;
 
-struct linked_list_t *requests;
+struct node_t* init_requests = NULL;
+pthread_mutex_t init_requests_mutex;
+pthread_t init_dispatch_thread;
+
+struct node_t* requests = NULL;
 pthread_mutex_t requests_mutex;
+pthread_t dispatch_thread;
 
-struct game_state_t game_state;
-pthread_mutex_t game_state_mutex;
-
-pthread_t dispatch_thread, scheduler_thread, allow_init_thread;
+sem_t can_init_dispatch;
 
 volatile sig_atomic_t keep_running = 1;
 
@@ -37,9 +41,36 @@ volatile sig_atomic_t keep_running = 1;
 void init_game_state(struct game_state_t *state)
 {
     int rand_grid_index = rand_int(0, MAX_GRIDS - 1);
-    game_state.grid.difficulty = server->grids[rand_grid_index].difficulty;
-    strncpy(game_state.grid.problem, server->grids[rand_grid_index].problem, GRID_SIZE);
-    strncpy(game_state.grid.solution, server->grids[rand_grid_index].solution, GRID_SIZE);
+    state->grid.difficulty = server->grids[rand_grid_index].difficulty;
+    strncpy(state->grid.problem, server->grids[rand_grid_index].problem, GRID_SIZE);
+    strncpy(state->grid.solution, server->grids[rand_grid_index].solution, GRID_SIZE);
+    state->states = NULL;
+    state->handlers = NULL;
+    for (size_t i = 0; i < GRID_SIZE; i++)
+    {
+        pthread_mutex_init(&state->cell_mutex[i], NULL);
+    }
+}
+
+
+void handle_monitor_message(struct monitor_msg_t* msg) {
+    switch (msg->type)
+    {
+    case MON_MSG_INIT:
+        struct monitor_state_t *state;
+        state = (struct monitor_state_t *)malloc(sizeof(struct monitor_state_t));
+        strncpy(state->monitor, msg->monitor, MAX_MONITOR_NAME);
+        state->priority = INITIAL_PRIORITY;
+        state->socket_fd = msg->socket_fd;
+        pthread_mutex_lock(&game_info_mutex);
+        ll_insert(&(game_info.states), state);
+        pthread_mutex_unlock(&game_info_mutex);
+        log_info(server->log_file, "HANDLED INIT MSG | MONITOR=%s", msg->monitor);
+        break;
+    
+    default:
+        break;
+    }
 }
 
 /**
@@ -49,45 +80,123 @@ void *handle_monitor(void *socket_fd)
 {
     while (keep_running)
     {
-        struct monitor_msg_t *in_msg;
-        in_msg = (struct monitor_msg_t *)malloc(sizeof(struct monitor_msg_t));
-        if (recv((int *)socket_fd, in_msg, sizeof(struct monitor_msg_t), 0) <= 0) {
+        struct monitor_msg_t *in_message;
+        in_message = (struct monitor_msg_t *)malloc(sizeof(struct monitor_msg_t));
+        if (recv((int *)socket_fd, in_message, sizeof(struct monitor_msg_t), 0) <= 0) {
             break;
         }
-        in_msg->socket_fd = (int*)socket_fd;
-        pthread_mutex_lock(&requests_mutex);
-        ll_insert(&requests, in_msg);
-        log_info(server->log_file,
-                 "RECV OK | NAME=%s TYPE=%d THREAD=%d REQUESTS=%d",
-                 in_msg->monitor,
-                 in_msg->type,
-                 in_msg->thread_id,
-                 requests->size);
-        pthread_mutex_unlock(&requests_mutex);
+        in_message->socket_fd = (int*)socket_fd;
+        switch (in_message->type)
+        {
+        case MON_MSG_INIT:
+            ll_insert(&init_requests, in_message);
+            log_info(server->log_file, "RECV OK | NAME=%s TYPE=MON_MSG_INIT", in_message->monitor);
+            break;
+        case MON_MSG_GUESS:
+            ll_insert(&(requests), requests);
+            log_info(server->log_file, "RECV OK | NAME=%s TYPE=MON_MSG_GUESS THREAD=%u", in_message->monitor, in_message->thread_id);
+            break;
+        }
     }
     close((int *)socket_fd);
     pthread_exit(NULL);
 }
 
-void handle_monitor_message(struct monitor_msg_t* msg) {
-    switch (msg->type)
-    {
-    case MON_MSG_INIT:
-        struct monitor_state_t* state;
-        state = (struct monitor_state_t*)malloc(sizeof(struct monitor_state_t));
-        strncpy(state->monitor, msg->monitor, MAX_MONITOR_NAME);
-        state->priority = INITIAL_PRIORITY;
-        state->socket_fd = msg->socket_fd;
-        state->phase = STATE_WAITING_INIT;
-        pthread_mutex_lock(&game_state_mutex);
-        ll_insert(&(game_state.monitor_states), state);
-        log_info(server->log_file, "HANDLED INIT MSG | MONITOR=%s", msg->monitor);
-        pthread_mutex_unlock(&game_state_mutex);
-        break;
-    
-    default:
-        break;
+void* init_dispatch() {
+    log_info(server->log_file, "INIT DISPATCH START");
+    int count = 0;
+    while (1) {
+        while (count < server->config->dispatch_batch) {
+            pthread_mutex_lock(&init_requests_mutex);
+            struct node_t* current = init_requests;
+            if (current != NULL) {
+                log_info(server->log_file, "HERE | MONITOR=%s COUNT=%d", ((struct monitor_msg_t*)(current->value))->monitor, count);
+                count += 1;
+                struct monitor_msg_t* msg = (struct monitor_msg_t*)(current->value);
+                log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s", msg->monitor);
+                handle_monitor_message(msg);
+                ll_delete_value(&init_requests, current->value);
+                pthread_mutex_unlock(&init_requests_mutex);
+            } else {
+                pthread_mutex_unlock(&init_requests_mutex);
+                break;
+            }
+        }
+
+        // Enough monitors joined, game can start
+        pthread_mutex_lock(&game_info_mutex);
+        if (ll_size(game_info.states) == server->config->min_monitors) {
+            struct node_t* current = game_info.states;
+            while (current != NULL) {
+                // Send START message
+                struct monitor_state_t* state = ((struct monitor_state_t*)(current->value));
+                struct server_msg_t out_message;
+                out_message.type = SERV_MSG_START;
+                if (send(state->socket_fd, &out_message, sizeof(struct server_msg_t), 0) <= 0) {
+                    log_error(server->log_file, "SEND START FAIL | MONITOR=%s", state->monitor);
+                    ll_delete_value(&(game_info.states), current->value);
+                } else {
+                    log_info(server->log_file, "SEND START OK | MONITOR=%s", state->monitor);
+                    current = current->next;
+                }
+            }
+            pthread_mutex_unlock(&game_info_mutex);
+            break;
+        }
+        pthread_mutex_unlock(&game_info_mutex);
+        count = 0;
+        usleep(DISPATCH_TRIGGER_TIME);
     }
+    log_info(server->log_file, "INIT DISPATCH END");
+    sem_post(&can_init_dispatch);
+    pthread_exit(NULL);
+}
+
+void *dispatch()
+{
+    sem_wait(&can_init_dispatch);
+    int count = 0;
+    while (keep_running)
+    {
+        log_info(server->log_file, "DISPATCH START | BATCH=%d", server->config->dispatch_batch);
+        while (count < server->config->dispatch_batch) {
+            count += 1;
+            pthread_mutex_lock(&init_requests_mutex);
+
+            // init_requests works in FIFO
+            if (ll_size(init_requests) > 0)
+            {
+                struct monitor_msg_t *msg = (struct monitor_msg_t *)(init_requests->value);
+                // Send START message
+                struct server_msg_t out_message;
+                out_message.type = SERV_MSG_START;
+                if (send(msg->socket_fd, &out_message, sizeof(struct server_msg_t), 0) <= 0) {
+                    log_error(server->log_file, "SEND START FAIL | MONITOR=%s", msg->monitor);
+                } else {
+                    log_info(server->log_file, "SEND START OK | MONITOR=%s", msg->monitor);
+                }
+                ll_delete_value(&init_requests, init_requests->value);
+                pthread_mutex_unlock(&init_requests_mutex);
+                continue;
+            }
+            pthread_mutex_unlock(&init_requests_mutex);
+
+            pthread_mutex_lock(&requests_mutex);
+            if (ll_size(requests) > 0)
+            {
+                struct monitor_msg_t *msg = (struct monitor_msg_t *)(requests->value);
+                handle_monitor_message(msg);
+                ll_delete_value(&requests, requests->value);
+                pthread_mutex_unlock(&requests_mutex);
+                continue;
+            }
+            pthread_mutex_unlock(&requests_mutex);
+        }
+        count = 0;
+        log_info(server->log_file, "DISPATCH END");
+        usleep(DISPATCH_TRIGGER_TIME);
+    }
+    pthread_exit(NULL);
 }
 
 /**
@@ -113,139 +222,38 @@ void handle_communication()
         }
         log_info(server->log_file, "ACCEPT | CLIENT=%s", client_ip);
 
-        pthread_mutex_lock(&game_state_mutex);
-        struct node_t *cur = game_state.monitor_handlers->head;
-        while (cur != NULL)
-        {
-            cur = cur->next;
-        }
-
-        cur = malloc(sizeof(struct node_t));
-        cur->next = NULL;
-        cur->value = malloc(sizeof(pthread_t));
-
-        if (pthread_create(cur->value, NULL, handle_monitor, (void *)new_socket_fd) == -1)
+        pthread_t* handler_thread;
+        handler_thread = (pthread_t*)malloc(sizeof(pthread_t));
+        if (pthread_create(handler_thread, NULL, handle_monitor, (void *)new_socket_fd) != 0)
         {
             log_error(server->log_file, "HANDLER THREAD CREATE ERROR | CLIENT=%s", client_ip);
+            free(handler_thread);
         }
         else
         {
             log_info(server->log_file, "HANDLER THREAD CREATE OK | CLIENT=%s", client_ip);
+            pthread_mutex_lock(&game_info_mutex);
+            ll_insert(&(game_info.handlers), handler_thread);
+            pthread_mutex_unlock(&game_info_mutex);
         }
-        pthread_mutex_unlock(&game_state_mutex);
     }
-}
-
-void* allow_init() {
-    while (1) {
-        pthread_mutex_lock(&game_state_mutex);
-        if (game_state.monitor_states->size == server->config->min_monitors) {
-            struct node_t* cur = game_state.monitor_states->head;
-            while (cur != NULL) {
-                // Send "START" message, allowing threads to play
-                struct monitor_state_t* state = ((struct monitor_state_t*)(cur->value));
-                struct server_msg_t out_msg;
-                out_msg.type = SERV_MSG_START;
-                if (send(state->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) == -1) {
-                    log_error(server->log_file, "SEND START FAIL | MONITOR=%s", state->monitor);
-                    state->phase = STATE_DEAD; // TODO: restructure
-                } else {
-                    log_info(server->log_file, "SEND START OK | MONITOR=%s", state->monitor);
-                    state->phase = STATE_GUESSING;
-                    cur = cur->next;
-                }
-            }
-            break;
-        }
-        pthread_mutex_unlock(&game_state_mutex);
-        usleep(10000 * 2); // sleep for 200ms
-    }
-    pthread_exit(NULL);
-}
-
-void *dispatch()
-{
-    while (keep_running)
-    {
-        if (requests->size > 0)
-        {
-            pthread_mutex_lock(&requests_mutex);
-            struct monitor_msg_t *msg = (struct monitor_msg_t *)(requests->head->value);
-            handle_monitor_message(msg);
-            ll_delete_value(&requests, requests->head->value);
-            pthread_mutex_unlock(&requests_mutex);
-        }
-        usleep(DISPATCH_TRIGGER_TIME);
-    }
-    pthread_exit(NULL);
-}
-
-int cmpfunc(const void *a, const void *b)
-{
-    int a_priority, b_priority;
-    struct node_t *cur = game_state.monitor_handlers->head;
-    printf("%s\n", ((struct monitor_state_t *)(cur->value))->monitor);
-    while (cur != NULL)
-    {
-        printf("%s\n", ((struct monitor_state_t *)(cur->value))->monitor);
-        if (strcmp(((struct monitor_state_t *)(cur->value))->monitor, ((struct monitor_msg_t *)a)->monitor) == 0)
-        {
-            a_priority = ((struct monitor_state_t *)(cur->value))->priority;
-        }
-        else if (strcmp(((struct monitor_state_t *)(cur->value))->monitor, ((struct monitor_msg_t *)b)->monitor) == 0)
-        {
-            b_priority = ((struct monitor_state_t *)(cur->value))->priority;
-        }
-        printf("%s\n", ((struct monitor_state_t *)(cur->value))->monitor);
-        cur = cur->next;
-    }
-
-    return a_priority - b_priority;
-}
-
-void *scheduler()
-{
-    while (keep_running)
-    {
-        pthread_mutex_lock(&requests_mutex);
-        if (requests->size > 1)
-        {
-            struct node_t *cur = requests->head;
-            while (cur != NULL)
-            {
-                printf("%s\n", ((struct monitor_msg_t *)(cur->value))->monitor);
-                cur = cur->next;
-            }
-            printf("here2, size: %d\n", requests->size);
-            qsort(requests, requests->size, sizeof(struct monitor_msg_t), cmpfunc);
-            printf("here3, size: %d\n", requests->size);
-            cur = requests->head;
-            while (cur != NULL)
-            {
-                printf("%s\n", ((struct monitor_msg_t *)(cur->value))->monitor);
-            }
-        }
-        pthread_mutex_unlock(&requests_mutex);
-        usleep(SCHEDULER_TRIGGER_TIME);
-    }
-    pthread_exit(NULL);
 }
 
 void termination_handler(int _)
 {
     keep_running = 0;
-    pthread_cancel(scheduler_thread);
+    pthread_cancel(init_dispatch_thread);
     pthread_cancel(dispatch_thread);
 
-    ll_free(&requests);
-    ll_free(&(game_state.monitor_states));
-    ll_free(&(game_state.monitor_handlers));
+    ll_free(&(requests));
+    ll_free(&(init_requests));
+    ll_free(&(game_info.states));
+    ll_free(&(game_info.handlers));
 
-    pthread_mutex_destroy(&server_mutex);
-    pthread_mutex_destroy(&requests_mutex);
+    pthread_mutex_destroy(&game_info_mutex);
     for (size_t i = 0; i < GRID_SIZE; i++)
     {
-        pthread_mutex_destroy(&(game_state.cell_mutex[i]));
+        pthread_mutex_destroy(&(game_info.cell_mutex[i]));
     }
 
     clean_server(server);
@@ -263,18 +271,12 @@ int main(int argc, char *argv[])
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
 
-    // Initialize mutexes
-    pthread_mutex_init(&server_mutex, NULL);
-    pthread_mutex_init(&requests_mutex, NULL);
-    for (size_t i = 0; i < GRID_SIZE; i++)
-    {
-        pthread_mutex_init(&(game_state.cell_mutex[i]), NULL);
-    }
+    // Initialize semaphore
+    sem_init(&can_init_dispatch, 0, 0);
 
-    // Initialize linked list
-    ll_init(&requests);
-    ll_init(&(game_state.monitor_states));
-    ll_init(&(game_state.monitor_handlers));
+    // Initialize mutexes
+    pthread_mutex_init(&init_requests_mutex, NULL);
+    pthread_mutex_init(&requests_mutex, NULL);
 
     if (argc == 1)
     { // User inputs server configuration file
@@ -311,8 +313,8 @@ int main(int argc, char *argv[])
     };
     log_info(server->log_file, "Loaded grids");
 
-    init_game_state(&game_state);
-    log_info(server->log_file, "Initialized game state with grid #%u", game_state.grid.difficulty);
+    init_game_state(&game_info);
+    log_info(server->log_file, "Initialized game state with grid #%u", game_info.grid.difficulty);
 
     if (listen(server->socket_fd, server->config->socket_backlog) == -1)
     {
@@ -324,14 +326,12 @@ int main(int argc, char *argv[])
     log_info(server->log_file, "All initializations succeeded");
 
     // Initialize scheduler and dispatch threads
-    pthread_create(&scheduler_thread, NULL, scheduler, NULL);
     pthread_create(&dispatch_thread, NULL, dispatch, NULL);
-    pthread_create(&allow_init_thread, NULL, allow_init, NULL);
+    pthread_create(&init_dispatch_thread, NULL, init_dispatch, NULL);
 
     handle_communication();
 
-    pthread_join(scheduler_thread, NULL);
     pthread_join(dispatch_thread, NULL);
-    pthread_join(allow_init_thread, NULL);
+    pthread_join(init_dispatch_thread, NULL);
     return 0;
 }

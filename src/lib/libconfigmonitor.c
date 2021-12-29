@@ -16,9 +16,6 @@
 #include "liblog.h"
 #include "libutil.h"
 
-// Monitor defaults
-#define DEFAULT_ARRIVAL_TIME 300
-#define DEFAULT_THREADS 5
 
 // Closes the monitor log file, and frees the memory taken by the monitor
 int clean_monitor(struct monitor_t *monitor)

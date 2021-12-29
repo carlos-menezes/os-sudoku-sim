@@ -1,6 +1,4 @@
-#include <arpa/inet.h>
 #include <netinet/in.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +41,10 @@ int initialize_server(struct server_t* *server)
         return -1;
     }
 
+    (*server)->config->dispatch_batch = DEFAULT_DISPATCH_BATCH;
+    (*server)->config->min_monitors = DEFAULT_MIN_MONITORS;
+    (*server)->config->socket_backlog = DEFAULT_SOCKET_BACKLOG;
+
     // Create log file
     char *log_name = malloc(8 /* "MONITOR_" LENGTH */ + 10 /* TIMESTAMP LENGTH IN SEC. */ + 4 /* ".log" LENGTH */);
     sprintf(log_name, "SERVER_%lu.log", (unsigned long)time(NULL));
@@ -79,21 +81,26 @@ void parse_server_config(char *buffer, struct server_t* *server)
     char *line = strtok(strdup(buffer), "\n");
     while (line)
     {
-        if (sscanf(line, "socket_backlog = %u", &(*server)->config->socket_backlog) == 1)
+        if (sscanf(line, "socket_backlog = %d", &(*server)->config->socket_backlog) == 1)
         {
             line = strtok(NULL, "\n");
             continue;
         }
 
-        if (sscanf(line, "min_monitors = %u", &(*server)->config->min_monitors) == 1)
+        if (sscanf(line, "min_monitors = %d", &(*server)->config->min_monitors) == 1)
         {
+            line = strtok(NULL, "\n");
+            continue;
+        }
+
+        if (sscanf(line, "dispatch_batch = %d", &(*server)->config->dispatch_batch)) {
             line = strtok(NULL, "\n");
             continue;
         }
 
         else
         {
-            printf("ERROR: invalid key `%s`\n", line);
+            log_error((*server)->log_file,"INVALID KEY | KEY=`%s`", line);
             line = strtok(NULL, "\n");
         }
     }

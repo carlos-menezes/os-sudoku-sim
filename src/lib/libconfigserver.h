@@ -7,11 +7,16 @@
 
 #include "libgrid.h"
 
+#define DEFAULT_SOCKET_BACKLOG 20
+#define DEFAULT_MIN_MONITORS 1
+#define DEFAULT_DISPATCH_BATCH 5
+
 // Server configurations
 struct server_config_t
 {
-	unsigned int socket_backlog;
-	unsigned int min_monitors;
+	int socket_backlog;
+	int min_monitors;
+    int dispatch_batch;
 };
 
 // Server log, configurations, grids, socket and socket address
