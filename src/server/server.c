@@ -137,7 +137,7 @@ void* init_dispatch() {
                 // Send START message
                 struct monitor_state_t* state = ((struct monitor_state_t*)(current->value));
                 struct server_msg_t out_message;
-                out_message.type = SERV_MSG_START;
+                out_message.type = SERV_MSG_OK;
                 if (send(state->socket_fd, &out_message, sizeof(struct server_msg_t), 0) <= 0) {
                     log_error(server->log_file, "SEND START FAIL | MONITOR=%s", state->monitor);
                     ll_delete_value(&(game_info.states), current->value);
@@ -179,7 +179,7 @@ void *dispatch()
                 struct monitor_msg_t *msg = (struct monitor_msg_t *)(init_requests->value);
                 // Send START message
                 struct server_msg_t out_message;
-                out_message.type = SERV_MSG_START;
+                out_message.type = SERV_MSG_OK;
                 if (send(msg->socket_fd, &out_message, sizeof(struct server_msg_t), 0) <= 0) {
                     log_error(server->log_file, "SEND START FAIL | MONITOR=%s", msg->monitor);
                 } else {
@@ -208,6 +208,10 @@ void *dispatch()
         usleep(DISPATCH_TRIGGER_TIME);
     }
     pthread_exit(NULL);
+}
+
+void* scheduler() {
+    while (keep_running) {}
 }
 
 /**

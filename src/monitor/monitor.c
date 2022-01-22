@@ -26,15 +26,17 @@ void *init_game_for_thread(void *thread_id)
         strncpy(out_msg.monitor, monitor->config->name, MAX_MONITOR_NAME);
         out_msg.thread_id = (unsigned int *)thread_id;
         out_msg.type = MON_MSG_GUESS;
-        out_msg.guess = rand_int(0, 9);
+        out_msg.cell = rand_int(0, 80);
+        out_msg.guess = rand_int(1, 9);
+        int delay = rand_int(1000, 3000);
 
         if (send(monitor->socket_fd, &out_msg, sizeof(struct monitor_msg_t), 0) == -1) {
             log_error(monitor->log_file, "SEND ERROR, EXIT PROCESS | THREAD=%u", out_msg.thread_id);
         } else {
-            log_info(monitor->log_file, "SEND OK | THREAD=%u TYPE=MON_MSG_GUESS GUESS=%u", out_msg.thread_id, out_msg.guess);
+            log_info(monitor->log_file, "SEND OK | THREAD=%u TYPE=MON_MSG_GUESS GUESS=%u@%u DELAY=%d", out_msg.thread_id, out_msg.guess, out_msg.cell, delay);
         }
 
-        usleep(monitor->config->arrival_time_ms + rand_int(500000, 1000000)); // +/- 500ms
+        usleep((monitor->config->arrival_time_ms + delay) * 1000);
     }
 
     pthread_exit(NULL);
