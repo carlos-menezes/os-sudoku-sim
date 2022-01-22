@@ -14,17 +14,18 @@ typedef enum
 #pragma pack(1)
 struct monitor_msg_t
 {
-    MONITOR_MESSAGE_TYPE type;
+    unsigned int type;
     unsigned int guess;
-    unsigned int thread_id;
-    unsigned int socket_fd;
+    unsigned int cell;
+    unsigned int priority;
     char monitor[MAX_MONITOR_NAME];
+    unsigned int thread_id;
+    unsigned int socket_fd;    
 };
 #pragma pack(0)
 
 typedef enum
 {
-    SERV_MSG_START,
     SERV_MSG_OK,
     SERV_MSG_ERR,
     SERV_MSG_END
@@ -33,7 +34,7 @@ typedef enum
 #pragma pack(1)
 struct server_msg_t
 {
-    SERVER_MESSAGE_TYPE type;
+    unsigned int type;
     unsigned int thread_id;
     unsigned int guess;
 };
