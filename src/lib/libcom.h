@@ -37,8 +37,8 @@ struct server_msg_t
 {
     unsigned int type;
     unsigned int thread_id;
-    unsigned int guess;
-    char problem[GRID_SIZE];
+    unsigned int guess; // TODO: remove?
+    char problem[GRID_SIZE + 1];
 };
 #pragma pack(0)
 

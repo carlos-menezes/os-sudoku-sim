@@ -4,6 +4,7 @@
 #include <string.h>
 #include <signal.h>
 #include <stdio.h>
+#include <semaphore.h>
 
 #include "monitor.h"
 
@@ -17,6 +18,7 @@
 struct monitor_t *monitor;
 pthread_mutex_t monitor_mutex;
 volatile sig_atomic_t keep_running = 1;
+sem_t can_handle_communication;
 
 void *init_game_for_thread(void *thread_id)
 {
@@ -26,9 +28,36 @@ void *init_game_for_thread(void *thread_id)
         strncpy(out_msg.monitor, monitor->config->name, MAX_MONITOR_NAME);
         out_msg.thread_id = (unsigned int *)thread_id;
         out_msg.type = MON_MSG_GUESS;
-        out_msg.cell = rand_int(0, 80);
         out_msg.guess = rand_int(1, 9);
-        int delay = rand_int(1000, 3000);
+
+        // Get available cells
+        struct node_t* available_cells = NULL;
+        pthread_mutex_lock(&monitor_mutex);
+        for (size_t i = 0; i < GRID_SIZE; i++)
+        {
+            // Parse current cell value as an int
+            int cellval_as_int = monitor->state.problem[i] - '0';
+            // The current cell is free (i.e. '0')
+            if (cellval_as_int == 0) {
+                 // Insert current index in the linked list
+                ll_insert(&available_cells, i);
+            }
+        }
+
+        // Select a random index from the `available_cells` linked list
+        int rand_index = rand_int(0, ll_size(available_cells) - 1);
+        // Loop until count == rand_index to get to the value @ rand_index
+        int count = 0;
+        struct node_t* current = available_cells;
+        while (count != rand_index)
+        {
+            count++;
+            current = current->next;
+        }
+        
+        out_msg.cell = (int)(current->value);
+        pthread_mutex_unlock(&monitor_mutex);
+        int delay = rand_int(1000, 3000);        
 
         if (send(monitor->socket_fd, &out_msg, sizeof(struct monitor_msg_t), 0) == -1) {
             log_error(monitor->log_file, "SEND ERROR, EXIT PROCESS | THREAD=%u", out_msg.thread_id);
@@ -54,11 +83,45 @@ void spawn_threads()
     }
 }
 
+void handle_server_message(struct server_msg_t *in_msg) {
+    switch (in_msg->type)
+    {
+    case SERV_MSG_OK: // Guess was correct
+        log_info(monitor->log_file, "HANDLING SERVER OK | THREAD=%u", in_msg->thread_id);
+        // Must mutate state with new problem
+        pthread_mutex_lock(&monitor_mutex);
+        strncpy(monitor->state.problem, in_msg->problem, GRID_SIZE);
+        pthread_mutex_unlock(&monitor_mutex);
+        log_info(monitor->log_file, "HANDLED SERVER OK | THREAD=%u", in_msg->thread_id);
+        break;
+    
+    case SERV_MSG_ERR:
+        log_info(monitor->log_file, "HANDLING SERVER ERR | THREAD=%u", in_msg->thread_id);
+        log_info(monitor->log_file, "HANDLED SERVER ERR | THREAD=%u", in_msg->thread_id);
+        break;
+        
+    case SERV_MSG_END:
+        log_info(monitor->log_file, "HANDLING SERVER END");
+        log_info(monitor->log_file, "HANDLED SERVER END");
+        clean_monitor(monitor);
+        exit(EXIT_SUCCESS);
+        break;
+    default:
+        break;
+    }
+}
+
 void handle_communication()
 {
+    sem_wait(&can_handle_communication);
     while (keep_running)
     {
-        /* code */
+        struct server_msg_t in_msg;
+        if (recv(monitor->socket_fd, &in_msg, sizeof(struct server_msg_t), 0) == -1) {
+            log_error(monitor->log_file, "RECV FAIL");
+        } else {
+            handle_server_message(&in_msg);
+        }
     }
     
 }
@@ -81,7 +144,10 @@ int handle_handshake() {
         log_error(monitor->log_file, "RECV INIT ERROR");
         return -1;
     } else {
-        log_info(monitor->log_file, "RECV INIT OK");
+        pthread_mutex_lock(&monitor_mutex);
+        strncpy(monitor->state.problem, in_msg.problem, GRID_SIZE);
+        log_info(monitor->log_file, "RECV INIT OK | PROBLEM: %s", monitor->state.problem);
+        pthread_mutex_unlock(&monitor_mutex);
     }
     return 0;
 }
@@ -110,6 +176,7 @@ int main(int argc, char *argv[])
     sigaction(SIGINT, &sa, NULL);
 
     pthread_mutex_init(&monitor_mutex, NULL);
+    sem_init(&can_handle_communication, 0, 0);
 
     if (argc == 1)
     { // User does not input server configuration file
@@ -150,9 +217,9 @@ int main(int argc, char *argv[])
         log_error(monitor->log_file, "Failed to send init message");
         exit(EXIT_FAILURE);
     };
+    sem_post(&can_handle_communication);
 
     spawn_threads();
-
     handle_communication();
     return 0;
 }

@@ -54,6 +54,7 @@ void init_game_state(struct game_state_t *state)
 
 
 void handle_monitor_message(struct monitor_msg_t* msg) {
+    struct server_msg_t out_msg;
     switch (msg->type)
     {
     case MON_MSG_INIT:
@@ -65,12 +66,18 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
         state->socket_fd = msg->socket_fd;
         pthread_mutex_lock(&game_info_mutex);
         ll_insert(&(game_info.states), state);
+        strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
         pthread_mutex_unlock(&game_info_mutex);
-        log_info(server->log_file, "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_INIT", msg->monitor);
+        out_msg.type = SERV_MSG_OK;
+        if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0) {
+            log_info(server->log_file, "HANDLED MESSAGE, SEND OK | MONITOR=%s TYPE=MON_MSG_INIT", msg->monitor);
+        } else {
+            log_info(server->log_file, "HANDLED MESSAGE, SEND FAIL | MONITOR=%s TYPE=MON_MSG_INIT", msg->monitor);
+        }
         break;
     case MON_MSG_GUESS:
         log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u CELL=%u", msg->monitor, msg->guess, msg->cell);
-        pthread_mutex_lock(&(game_info.cell_mutex[msg->cell]));
+        // pthread_mutex_lock(&(game_info.cell_mutex[msg->cell]));
         int solution = game_info.grid.solution[msg->cell] - '0';
         // Loop through all monitors and find the sender of the current message.
         // The sender's priority will then be increased/decreased depending on the outcome of the guess.
@@ -80,21 +87,54 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
         //     sender = sender->next;
         // }
         // struct monitor_state_t* monitor = ((struct monitor_state_t*)(sender->value));
-
+        // Create outgoing message
         if (solution == msg->guess) { // Guess is correct
             // monitor->priority++;
-            // log_info(server->log_file, "GUESS SUCCESS | MONITOR=%s PRIORITY=%u GUESS=%u CELL=%u", msg->monitor, monitor->priority, msg->guess, msg->cell);
-            log_info(server->log_file, "GUESS SUCCESS | MONITOR=%s GUESS=%u CELL=%u", msg->monitor, msg->guess, msg->cell);
-            // get available cells
-            // reply to monitor
+            // Modify the problem string with the guess
+            game_info.grid.problem[msg->cell] = msg->guess + '0';
+            log_info(server->log_file, "%s\n%s\n\n", game_info.grid.problem, game_info.grid.solution);
+            
+            // Check if there are any empty cells
+            int empty_cells = 0;
+            for (size_t i = 0; i < GRID_SIZE; i++)
+            {
+                int cellval_as_int = game_info.grid.problem[i] - '0';
+                if (cellval_as_int == 0) { 
+                    empty_cells = 1;
+                    break;
+                }
+            }
+
+            // Build the outgoing packet            
+            if (empty_cells) { // Simulation must continue
+                out_msg.type = SERV_MSG_OK;
+                // Copy the problem into the `msg->problem` buffer
+                strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
+                out_msg.thread_id = msg->thread_id;
+            } else { // If there are no empty cells, the sudoku grid has been solved
+                out_msg.type = SERV_MSG_END;
+                log_info(server->log_file, "NO MORE GUESSES, ENDING GAME");
+            }
+
+            // Send the message to the corresponding monitor
+            if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0) {
+                log_info(server->log_file, "GUESS SUCCESS, SEND FAIL | TYPE=%u", out_msg.type);
+            } else {
+                log_info(server->log_file, "GUESS SUCCESS, SEND OK | TYPE=%u", out_msg.type);
+            }
         } else {
             // if (monitor->priority > BASE_PRIORITY) {
             //     monitor->priority--;
             // }
-            // log_info(server->log_file, "GUESS FAIL | MONITOR=%s PRIORITY=%u GUESS=%u CELL=%u", msg->monitor, monitor->priority, msg->guess, msg->cell);
-            log_info(server->log_file, "GUESS FAIL | MONITOR=%s GUESS=%u CELL=%u", msg->monitor, msg->guess, msg->cell);
+            out_msg.type = SERV_MSG_ERR;
+            out_msg.thread_id = msg->thread_id;
+            if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0) {
+                log_info(server->log_file, "GUESS ERROR | SEND FAIL");
+            } else {
+                log_info(server->log_file, "GUESS ERROR | SEND OK");
+            }
         }
-        pthread_mutex_unlock(&(game_info.cell_mutex[msg->cell]));
+        // pthread_mutex_unlock(&(game_info.cell_mutex[msg->cell]));
         log_info(server->log_file, "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u", msg->monitor, msg->guess);
     default:
 
@@ -161,9 +201,10 @@ void* init_dispatch() {
             while (current != NULL) {
                 // Send START message
                 struct monitor_state_t* state = ((struct monitor_state_t*)(current->value));
-                struct server_msg_t out_message;
-                out_message.type = SERV_MSG_OK;
-                if (send(state->socket_fd, &out_message, sizeof(struct server_msg_t), 0) <= 0) {
+                struct server_msg_t out_msg;
+                out_msg.type = SERV_MSG_OK;
+                strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
+                if (send(state->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0) {
                     log_error(server->log_file, "SEND START FAIL | MONITOR=%s", state->monitor);
                     ll_delete_value(&(game_info.states), current->value);
                 } else {
@@ -197,19 +238,11 @@ void *dispatch()
         while (count < server->config->dispatch_batch) {
             count += 1;
             pthread_mutex_lock(&init_requests_mutex);
-
             // init_requests works in FIFO
             if (ll_size(init_requests) > 0)
             {
                 struct monitor_msg_t *msg = (struct monitor_msg_t *)(init_requests->value);
-                // Send START message
-                struct server_msg_t out_message;
-                out_message.type = SERV_MSG_OK;
-                if (send(msg->socket_fd, &out_message, sizeof(struct server_msg_t), 0) <= 0) {
-                    log_error(server->log_file, "SEND START FAIL | MONITOR=%s", msg->monitor);
-                } else {
-                    log_info(server->log_file, "SEND START OK | MONITOR=%s", msg->monitor);
-                }
+                handle_monitor_message(msg);
                 ll_delete_value(&init_requests, init_requests->value);
                 pthread_mutex_unlock(&init_requests_mutex);
                 continue;

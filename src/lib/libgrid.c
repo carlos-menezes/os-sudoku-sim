@@ -14,7 +14,7 @@ int load_grids(struct server_t** s) {
     char* line = strtok(strdup(buf), "\n");
     int i = 0;
     while (line) {
-        sscanf(line, "%u %s %s", &((*s)->grids[i].difficulty), (*s)->grids[i].problem, (*s)->grids[i].solution);
+        sscanf(line, "%u|%81s|%81s", &((*s)->grids[i].difficulty), (*s)->grids[i].problem, (*s)->grids[i].solution);
         i++;
         line  = strtok(NULL, "\n");
     }

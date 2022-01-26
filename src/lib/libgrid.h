@@ -8,9 +8,10 @@
 typedef enum { EASY, MEDIUM, HARD } DIFFICULTY;
 struct grid_t {
 	DIFFICULTY difficulty;
-	char problem[GRID_SIZE];
-	char solution[GRID_SIZE];
+	char problem[GRID_SIZE + 1];
+	char solution[GRID_SIZE + 1];
 };
 
+void get_available_cells(char* problem, char* buf);
 
 #endif
