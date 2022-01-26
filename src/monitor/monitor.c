@@ -33,7 +33,7 @@ void *init_game_for_thread(void *thread_id)
         if (send(monitor->socket_fd, &out_msg, sizeof(struct monitor_msg_t), 0) == -1) {
             log_error(monitor->log_file, "SEND ERROR, EXIT PROCESS | THREAD=%u", out_msg.thread_id);
         } else {
-            log_info(monitor->log_file, "SEND OK | THREAD=%u TYPE=MON_MSG_GUESS GUESS=%u@%u DELAY=%d", out_msg.thread_id, out_msg.guess, out_msg.cell, delay);
+            log_info(monitor->log_file, "SEND OK | THREAD=%u TYPE=MON_MSG_GUESS CELL=%u GUESS=%u DELAY=%d", out_msg.thread_id, out_msg.cell, out_msg.guess, delay);
         }
 
         usleep((monitor->config->arrival_time_ms + delay) * 1000);

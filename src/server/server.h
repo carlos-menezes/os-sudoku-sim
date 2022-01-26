@@ -7,7 +7,7 @@
 
 #define DISPATCH_TRIGGER_TIME 500000 * 2 * 2 // 2s
 
-#define INITIAL_PRIORITY 5
+#define BASE_PRIORITY 5
 
 struct monitor_state_t {
     char monitor[MAX_MONITOR_NAME];

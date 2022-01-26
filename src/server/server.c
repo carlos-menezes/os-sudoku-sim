@@ -61,7 +61,7 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
         struct monitor_state_t *state;
         state = (struct monitor_state_t *)malloc(sizeof(struct monitor_state_t));
         strncpy(state->monitor, msg->monitor, MAX_MONITOR_NAME);
-        state->priority = INITIAL_PRIORITY;
+        state->priority = BASE_PRIORITY;
         state->socket_fd = msg->socket_fd;
         pthread_mutex_lock(&game_info_mutex);
         ll_insert(&(game_info.states), state);
@@ -69,7 +69,32 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
         log_info(server->log_file, "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_INIT", msg->monitor);
         break;
     case MON_MSG_GUESS:
-        log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u", msg->monitor, msg->guess);
+        log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u CELL=%u", msg->monitor, msg->guess, msg->cell);
+        pthread_mutex_lock(&(game_info.cell_mutex[msg->cell]));
+        int solution = game_info.grid.solution[msg->cell] - '0';
+        // Loop through all monitors and find the sender of the current message.
+        // The sender's priority will then be increased/decreased depending on the outcome of the guess.
+        // struct node_t* sender = game_info.states;
+        // while (strcmp(((struct monitor_state_t*)(sender->value))->monitor, msg->monitor) == 0) 
+        // {
+        //     sender = sender->next;
+        // }
+        // struct monitor_state_t* monitor = ((struct monitor_state_t*)(sender->value));
+
+        if (solution == msg->guess) { // Guess is correct
+            // monitor->priority++;
+            // log_info(server->log_file, "GUESS SUCCESS | MONITOR=%s PRIORITY=%u GUESS=%u CELL=%u", msg->monitor, monitor->priority, msg->guess, msg->cell);
+            log_info(server->log_file, "GUESS SUCCESS | MONITOR=%s GUESS=%u CELL=%u", msg->monitor, msg->guess, msg->cell);
+            // get available cells
+            // reply to monitor
+        } else {
+            // if (monitor->priority > BASE_PRIORITY) {
+            //     monitor->priority--;
+            // }
+            // log_info(server->log_file, "GUESS FAIL | MONITOR=%s PRIORITY=%u GUESS=%u CELL=%u", msg->monitor, monitor->priority, msg->guess, msg->cell);
+            log_info(server->log_file, "GUESS FAIL | MONITOR=%s GUESS=%u CELL=%u", msg->monitor, msg->guess, msg->cell);
+        }
+        pthread_mutex_unlock(&(game_info.cell_mutex[msg->cell]));
         log_info(server->log_file, "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u", msg->monitor, msg->guess);
     default:
 
@@ -191,7 +216,7 @@ void *dispatch()
             }
             pthread_mutex_unlock(&init_requests_mutex);
 
-            // requests works in priority
+            // requests works in fifo (eventually priority)
             pthread_mutex_lock(&requests_mutex);
             if (ll_size(requests) > 0)
             {
@@ -208,10 +233,6 @@ void *dispatch()
         usleep(DISPATCH_TRIGGER_TIME);
     }
     pthread_exit(NULL);
-}
-
-void* scheduler() {
-    while (keep_running) {}
 }
 
 /**
@@ -341,8 +362,8 @@ int main(int argc, char *argv[])
     log_info(server->log_file, "All initializations succeeded");
 
     // Initialize scheduler and dispatch threads
-    pthread_create(&dispatch_thread, NULL, dispatch, NULL);
     pthread_create(&init_dispatch_thread, NULL, init_dispatch, NULL);
+    pthread_create(&dispatch_thread, NULL, dispatch, NULL);
 
     handle_communication();
 

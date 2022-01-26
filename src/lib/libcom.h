@@ -2,6 +2,7 @@
 #define LIBCOM_H
 
 #include "libconfigmonitor.h"
+#include "libgrid.h"
 
 #define DEFAULT_PORT 9998
 
@@ -37,7 +38,12 @@ struct server_msg_t
     unsigned int type;
     unsigned int thread_id;
     unsigned int guess;
+    char problem[GRID_SIZE];
 };
 #pragma pack(0)
 
 #endif
+
+// -> "005400006008700400009100250700030890000070000500604000100260300000000000000000510"
+// "005400006008700400009100250700030890000070000500604000100260300000000000000000510" <-
+// <-
