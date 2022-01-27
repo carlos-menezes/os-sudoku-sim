@@ -103,8 +103,7 @@ void handle_server_message(struct server_msg_t *in_msg) {
     case SERV_MSG_END:
         log_info(monitor->log_file, "HANDLING SERVER END");
         log_info(monitor->log_file, "HANDLED SERVER END");
-        clean_monitor(monitor);
-        exit(EXIT_SUCCESS);
+        keep_running = 0;
         break;
     default:
         break;
@@ -123,7 +122,6 @@ void handle_communication()
             handle_server_message(&in_msg);
         }
     }
-    
 }
 
 /**
@@ -152,9 +150,8 @@ int handle_handshake() {
     return 0;
 }
 
-void termination_handler(int _)
-{
-    keep_running = 0;
+void cleanup() {
+keep_running = 0;
 
     for (size_t i = 0; i < monitor->config->threads; i++)
     {
@@ -163,6 +160,11 @@ void termination_handler(int _)
     
     clean_monitor(monitor);
     exit(EXIT_SUCCESS);
+}
+
+void termination_handler(int _)
+{
+    cleanup();
 }
 
 int main(int argc, char *argv[])
@@ -221,5 +223,6 @@ int main(int argc, char *argv[])
 
     spawn_threads();
     handle_communication();
+    clean_monitor(monitor);
     return 0;
 }

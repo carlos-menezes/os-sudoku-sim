@@ -26,5 +26,6 @@ void handle_communication();
 void* dispatch();
 void*init_dispatch();
 void* handle_monitor(void *socket_fd);
+void cleanup();
 
 #endif

@@ -16,6 +16,7 @@
 int clean_server(struct server_t* server)
 {
     log_info(server->log_file, "Shutting down");
+    shutdown(server->socket_fd, SHUT_RDWR);
     close(server->socket_fd);
     free(server->config);
     if (fclose(server->log_file) != 0)

@@ -52,7 +52,6 @@ void init_game_state(struct game_state_t *state)
     }
 }
 
-
 void handle_monitor_message(struct monitor_msg_t* msg) {
     struct server_msg_t out_msg;
     switch (msg->type)
@@ -77,22 +76,12 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
         break;
     case MON_MSG_GUESS:
         log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u CELL=%u", msg->monitor, msg->guess, msg->cell);
-        // pthread_mutex_lock(&(game_info.cell_mutex[msg->cell]));
+        pthread_mutex_lock(&game_info_mutex);
         int solution = game_info.grid.solution[msg->cell] - '0';
-        // Loop through all monitors and find the sender of the current message.
-        // The sender's priority will then be increased/decreased depending on the outcome of the guess.
-        // struct node_t* sender = game_info.states;
-        // while (strcmp(((struct monitor_state_t*)(sender->value))->monitor, msg->monitor) == 0) 
-        // {
-        //     sender = sender->next;
-        // }
-        // struct monitor_state_t* monitor = ((struct monitor_state_t*)(sender->value));
         // Create outgoing message
         if (solution == msg->guess) { // Guess is correct
-            // monitor->priority++;
             // Modify the problem string with the guess
             game_info.grid.problem[msg->cell] = msg->guess + '0';
-            log_info(server->log_file, "%s\n%s\n\n", game_info.grid.problem, game_info.grid.solution);
             
             // Check if there are any empty cells
             int empty_cells = 0;
@@ -111,21 +100,26 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
                 // Copy the problem into the `msg->problem` buffer
                 strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
                 out_msg.thread_id = msg->thread_id;
+                pthread_mutex_unlock(&game_info_mutex);
             } else { // If there are no empty cells, the sudoku grid has been solved
                 out_msg.type = SERV_MSG_END;
-                log_info(server->log_file, "NO MORE GUESSES, ENDING GAME");
-            }
-
-            // Send the message to the corresponding monitor
-            if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0) {
-                log_info(server->log_file, "GUESS SUCCESS, SEND FAIL | TYPE=%u", out_msg.type);
-            } else {
-                log_info(server->log_file, "GUESS SUCCESS, SEND OK | TYPE=%u", out_msg.type);
+                log_info(server->log_file, "ENDING GAME");
+                // Send the SERV_MSG_END message to every monitor
+                struct node_t* current = game_info.states;
+                while (current != NULL)
+                {
+                    struct monitor_state_t* state = current->value;
+                    if (send(state->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) > 0) {
+                        log_info(server->log_file, "SEND END MESSAGE OK | MONITOR=%s TYPE=%u", state->monitor, out_msg.type);
+                    }
+                    current = current->next;
+                }
+                pthread_mutex_unlock(&game_info_mutex);
+                cleanup();
+                printf("here\n");
             }
         } else {
-            // if (monitor->priority > BASE_PRIORITY) {
-            //     monitor->priority--;
-            // }
+            pthread_mutex_unlock(&game_info_mutex);
             out_msg.type = SERV_MSG_ERR;
             out_msg.thread_id = msg->thread_id;
             if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0) {
@@ -134,10 +128,9 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
                 log_info(server->log_file, "GUESS ERROR | SEND OK");
             }
         }
-        // pthread_mutex_unlock(&(game_info.cell_mutex[msg->cell]));
         log_info(server->log_file, "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u", msg->monitor, msg->guess);
+        break;
     default:
-
         break;
     }
 }
@@ -185,7 +178,18 @@ void* init_dispatch() {
             if (current != NULL) {
                 count += 1;
                 struct monitor_msg_t* msg = (struct monitor_msg_t*)(current->value);
-                handle_monitor_message(msg);
+                log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s TYPE=MON_MSG_INIT", msg->monitor);
+                // THIS SHOULD HAVE BEEN HANDLED IN handle_monitor_msg :/
+                struct monitor_state_t *state;
+                state = (struct monitor_state_t *)malloc(sizeof(struct monitor_state_t));
+                strncpy(state->monitor, msg->monitor, MAX_MONITOR_NAME);
+                state->priority = BASE_PRIORITY;
+                state->socket_fd = msg->socket_fd;
+                pthread_mutex_lock(&game_info_mutex);
+                ll_insert(&(game_info.states), state);
+                pthread_mutex_unlock(&game_info_mutex);
+                log_info(server->log_file, "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_INIT", msg->monitor);
+                // IT SHOULD REALLY HAVE BEEN
                 ll_delete_value(&init_requests, current->value);
                 pthread_mutex_unlock(&init_requests_mutex);
             } else {
@@ -227,6 +231,7 @@ void* init_dispatch() {
 void *dispatch()
 {
     sem_wait(&can_init_dispatch);
+    log_info(server->log_file, "INIT DISPATCH THREAD");
     int count = 0;
     while (keep_running)
     {
@@ -265,6 +270,7 @@ void *dispatch()
         log_info(server->log_file, "DISPATCH END");
         usleep(DISPATCH_TRIGGER_TIME);
     }
+    log_info(server->log_file, "END DISPATCH THREAD");
     pthread_exit(NULL);
 }
 
@@ -308,8 +314,7 @@ void handle_communication()
     }
 }
 
-void termination_handler(int _)
-{
+void cleanup() {
     keep_running = 0;
     pthread_cancel(init_dispatch_thread);
     pthread_cancel(dispatch_thread);
@@ -327,6 +332,11 @@ void termination_handler(int _)
 
     clean_server(server);
     exit(EXIT_SUCCESS);
+}
+
+void termination_handler(int _)
+{
+    cleanup();
 }
 
 int main(int argc, char *argv[])
@@ -394,7 +404,7 @@ int main(int argc, char *argv[])
 
     log_info(server->log_file, "All initializations succeeded");
 
-    // Initialize scheduler and dispatch threads
+    // Initialize dispatch threads
     pthread_create(&init_dispatch_thread, NULL, init_dispatch, NULL);
     pthread_create(&dispatch_thread, NULL, dispatch, NULL);
 
