@@ -126,12 +126,15 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
                 while (current != NULL)
                 {
                     struct monitor_state_t* state = current->value;
-                    if (send(state->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) > 0) {
-                        log_info(server->log_file, "SEND END MESSAGE OK | MONITOR=%s TYPE=%u", state->monitor, out_msg.type);
-                    }
+                    send(state->socket_fd, &out_msg, sizeof(struct server_msg_t), 0);
+
+                    // Show stats for this monitor
+                    log_info(server->log_file, "MONITOR=%s PLAYS=%u CORRECT=%u RATIO=%.2f", state->monitor, state->guesses, state->correct_guesses, state->guesses - state->correct_guesses, (float)(state->correct_guesses) / (float)(state->guesses));
+
                     current = current->next;
                 }
                 pthread_mutex_unlock(&game_info_mutex);
+
                 cleanup(); // exit point
             }
         } else {
