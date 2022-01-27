@@ -113,6 +113,11 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
                 strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
                 out_msg.thread_id = msg->thread_id;
                 pthread_mutex_unlock(&game_info_mutex);
+                if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0) {
+                    log_info(server->log_file, "GUESS OK | SEND FAIL");
+                } else {
+                    log_info(server->log_file, "GUESS OK | SEND OK");
+                }
             } else { // If there are no empty cells, the sudoku grid has been solved
                 out_msg.type = SERV_MSG_END;
                 log_info(server->log_file, "ENDING GAME");
