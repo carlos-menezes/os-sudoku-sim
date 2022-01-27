@@ -102,8 +102,8 @@ void handle_server_message(struct server_msg_t *in_msg) {
         
     case SERV_MSG_END:
         log_info(monitor->log_file, "HANDLING SERVER END");
+        cleanup();
         log_info(monitor->log_file, "HANDLED SERVER END");
-        keep_running = 0;
         break;
     default:
         break;
@@ -151,13 +151,7 @@ int handle_handshake() {
 }
 
 void cleanup() {
-keep_running = 0;
-
-    for (size_t i = 0; i < monitor->config->threads; i++)
-    {
-        pthread_cancel(monitor->threads + i);
-    }
-    
+    keep_running = 0;    
     clean_monitor(monitor);
     exit(EXIT_SUCCESS);
 }

@@ -11,8 +11,11 @@
 
 struct monitor_state_t {
     char monitor[MAX_MONITOR_NAME];
-    unsigned int priority;
     unsigned int socket_fd;
+
+    // Stats
+    unsigned int guesses;
+    unsigned int correct_guesses;
 };
 struct game_state_t {
     struct grid_t grid;

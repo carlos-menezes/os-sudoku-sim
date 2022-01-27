@@ -20,15 +20,12 @@
 // Closes the monitor log file, and frees the memory taken by the monitor
 int clean_monitor(struct monitor_t *monitor)
 {
-    log_info(monitor->log_file, "Shutting down");
+    log_info(monitor->log_file, "SHUTTING DOWN");
     close(monitor->socket_fd);
-    free(monitor->config);
-    free(monitor->threads);
     if (fclose(monitor->log_file) != 0)
     {
         return -1;
     }
-    free(monitor);
     return 0;
 }
 

@@ -15,15 +15,12 @@
 // Closes the server log file, and frees the memory taken by the server
 int clean_server(struct server_t* server)
 {
-    log_info(server->log_file, "Shutting down");
-    shutdown(server->socket_fd, SHUT_RDWR);
+    log_info(server->log_file, "SHUTTING DOWN SOCKET");
     close(server->socket_fd);
-    free(server->config);
     if (fclose(server->log_file) != 0)
     {
         return -1;
     }
-    free(server);
     return 0;
 }
 

@@ -46,10 +46,10 @@ void init_game_state(struct game_state_t *state)
     strncpy(state->grid.solution, server->grids[rand_grid_index].solution, GRID_SIZE);
     state->states = NULL;
     state->handlers = NULL;
-    for (size_t i = 0; i < GRID_SIZE; i++)
-    {
-        pthread_mutex_init(&state->cell_mutex[i], NULL);
-    }
+    // for (size_t i = 0; i < GRID_SIZE; i++)
+    // {
+    //     pthread_mutex_init(&state->cell_mutex[i], NULL);
+    // }
 }
 
 void handle_monitor_message(struct monitor_msg_t* msg) {
@@ -61,8 +61,9 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
         struct monitor_state_t *state;
         state = (struct monitor_state_t *)malloc(sizeof(struct monitor_state_t));
         strncpy(state->monitor, msg->monitor, MAX_MONITOR_NAME);
-        state->priority = BASE_PRIORITY;
         state->socket_fd = msg->socket_fd;
+        state->guesses = 0;
+        state->correct_guesses = 0;
         pthread_mutex_lock(&game_info_mutex);
         ll_insert(&(game_info.states), state);
         strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
@@ -77,9 +78,20 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
     case MON_MSG_GUESS:
         log_info(server->log_file, "HANDLING MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u CELL=%u", msg->monitor, msg->guess, msg->cell);
         pthread_mutex_lock(&game_info_mutex);
+        // Find the sender in the states list
+        struct node_t* cur = game_info.states;
+        while (strcmp(msg->monitor, ((struct monitor_state_t*)(cur->value))->monitor) != 0)
+        {
+            cur = cur->next;
+        }
+        
+        struct monitor_state_t* monitor = (struct monitor_state_t*)(cur->value);
+        monitor->guesses += 1;
         int solution = game_info.grid.solution[msg->cell] - '0';
         // Create outgoing message
-        if (solution == msg->guess) { // Guess is correct
+        if (solution == msg->guess) {
+            // Guess is correct
+            monitor->correct_guesses += 1;
             // Modify the problem string with the guess
             game_info.grid.problem[msg->cell] = msg->guess + '0';
             
@@ -115,8 +127,7 @@ void handle_monitor_message(struct monitor_msg_t* msg) {
                     current = current->next;
                 }
                 pthread_mutex_unlock(&game_info_mutex);
-                cleanup();
-                printf("here\n");
+                cleanup(); // exit point
             }
         } else {
             pthread_mutex_unlock(&game_info_mutex);
@@ -183,7 +194,6 @@ void* init_dispatch() {
                 struct monitor_state_t *state;
                 state = (struct monitor_state_t *)malloc(sizeof(struct monitor_state_t));
                 strncpy(state->monitor, msg->monitor, MAX_MONITOR_NAME);
-                state->priority = BASE_PRIORITY;
                 state->socket_fd = msg->socket_fd;
                 pthread_mutex_lock(&game_info_mutex);
                 ll_insert(&(game_info.states), state);
@@ -316,20 +326,6 @@ void handle_communication()
 
 void cleanup() {
     keep_running = 0;
-    pthread_cancel(init_dispatch_thread);
-    pthread_cancel(dispatch_thread);
-
-    ll_free(&(requests));
-    ll_free(&(init_requests));
-    ll_free(&(game_info.states));
-    ll_free(&(game_info.handlers));
-
-    pthread_mutex_destroy(&game_info_mutex);
-    for (size_t i = 0; i < GRID_SIZE; i++)
-    {
-        pthread_mutex_destroy(&(game_info.cell_mutex[i]));
-    }
-
     clean_server(server);
     exit(EXIT_SUCCESS);
 }
