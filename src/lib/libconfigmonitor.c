@@ -33,7 +33,7 @@ int clean_monitor(struct monitor_t *monitor)
 int initialize_monitor(struct monitor_t **monitor)
 {
     // Allocate memory for the monitor structure
-    *monitor = (struct monitor_t*)malloc(sizeof(struct monitor_t));
+    *monitor = (struct monitor_t *)malloc(sizeof(struct monitor_t));
     if ((*monitor) == NULL)
     { // Verify if memory was correctly allocated
         return -1;

@@ -21,12 +21,13 @@ struct monitor_msg_t
     unsigned int priority;
     char monitor[MAX_MONITOR_NAME];
     unsigned int thread_id;
-    unsigned int socket_fd;    
+    unsigned int socket_fd;
 };
 #pragma pack(0)
 
 typedef enum
 {
+    SERV_MSG_IGN,
     SERV_MSG_OK,
     SERV_MSG_ERR,
     SERV_MSG_END
@@ -43,7 +44,3 @@ struct server_msg_t
 #pragma pack(0)
 
 #endif
-
-// -> "005400006008700400009100250700030890000070000500604000100260300000000000000000510"
-// "005400006008700400009100250700030890000070000500604000100260300000000000000000510" <-
-// <-

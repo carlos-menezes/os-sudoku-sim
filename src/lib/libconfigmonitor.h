@@ -18,7 +18,8 @@ struct monitor_config_t
     char name[MAX_MONITOR_NAME];
 };
 
-struct monitor_game_state_t {
+struct monitor_game_state_t
+{
     char problem[GRID_SIZE + 1];
 };
 
@@ -35,8 +36,8 @@ struct monitor_t
     struct monitor_game_state_t state;
 };
 
-int initialize_monitor(struct monitor_t** monitor);
-void parse_monitor_config(char *buffer, struct monitor_t** monitor);
-int clean_monitor(struct monitor_t* monitor);
+int initialize_monitor(struct monitor_t **monitor);
+void parse_monitor_config(char *buffer, struct monitor_t **monitor);
+int clean_monitor(struct monitor_t *monitor);
 
 #endif

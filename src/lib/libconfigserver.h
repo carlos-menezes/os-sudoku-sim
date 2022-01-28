@@ -14,20 +14,20 @@
 // Server configurations
 struct server_config_t
 {
-	int socket_backlog;
-	int min_monitors;
+    int socket_backlog;
+    int min_monitors;
     int dispatch_batch;
 };
 
 // Server log, configurations, grids, socket and socket address
 struct server_t
 {
-	FILE *log_file;
-	struct server_config_t *config;
-	struct grid_t grids[MAX_GRIDS];
+    FILE *log_file;
+    struct server_config_t *config;
+    struct grid_t grids[MAX_GRIDS];
 
-	int socket_fd;
-	struct sockaddr_in socket_address;
+    int socket_fd;
+    struct sockaddr_in socket_address;
 };
 
 int initialize_server(struct server_t **server);
