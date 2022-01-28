@@ -7,13 +7,13 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "libcom.h"
 #include "libconfigserver.h"
 #include "libio.h"
 #include "liblog.h"
-#include "libcom.h"
 
 // Closes the server log file, and frees the memory taken by the server
-int clean_server(struct server_t* server)
+int clean_server(struct server_t *server)
 {
     log_info(server->log_file, "SHUTTING DOWN SOCKET");
     close(server->socket_fd);
@@ -25,9 +25,9 @@ int clean_server(struct server_t* server)
 }
 
 // Creates the server's log file, and sets the configurations to the default values
-int initialize_server(struct server_t* *server)
+int initialize_server(struct server_t **server)
 {
-    *server = (struct server_t*)malloc(sizeof(struct server_t));
+    *server = (struct server_t *)malloc(sizeof(struct server_t));
     if ((*server) == NULL)
     {
         return -1;
@@ -63,18 +63,23 @@ int initialize_server(struct server_t* *server)
     (*server)->socket_address.sin_port = htons(DEFAULT_PORT);
 
     setsockopt((*server)->socket_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-    if ((bind((*server)->socket_fd, (struct sockaddr *)&(*server)->socket_address, sizeof((*server)->socket_address))) == -1)
+    if ((bind((*server)->socket_fd,
+              (struct sockaddr *)&(*server)->socket_address,
+              sizeof((*server)->socket_address))) == -1)
     {
         log_fatal(NULL, "Failed to bind");
         return -1;
     }
 
-    log_info((*server)->log_file, "Socket created on %d:%d", (*server)->socket_address.sin_addr.s_addr, ntohs((*server)->socket_address.sin_port));
+    log_info((*server)->log_file,
+             "Socket created on %d:%d",
+             (*server)->socket_address.sin_addr.s_addr,
+             ntohs((*server)->socket_address.sin_port));
     return 0;
 };
 
 // Reads the configuration file, and sets the configurations to those new values
-void parse_server_config(char *buffer, struct server_t* *server)
+void parse_server_config(char *buffer, struct server_t **server)
 {
     char *line = strtok(strdup(buffer), "\n");
     while (line)
@@ -91,14 +96,15 @@ void parse_server_config(char *buffer, struct server_t* *server)
             continue;
         }
 
-        if (sscanf(line, "dispatch_batch = %d", &(*server)->config->dispatch_batch)) {
+        if (sscanf(line, "dispatch_batch = %d", &(*server)->config->dispatch_batch))
+        {
             line = strtok(NULL, "\n");
             continue;
         }
 
         else
         {
-            log_error((*server)->log_file,"INVALID KEY | KEY=`%s`", line);
+            log_error((*server)->log_file, "INVALID KEY | KEY=`%s`", line);
             line = strtok(NULL, "\n");
         }
     }

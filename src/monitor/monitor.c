@@ -1,18 +1,18 @@
-#include <stdlib.h>
-#include <time.h>
-#include <unistd.h>
-#include <string.h>
+#include <semaphore.h>
 #include <signal.h>
 #include <stdio.h>
-#include <semaphore.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "monitor.h"
 
 #include "libarray.h"
+#include "libcom.h"
 #include "libconfigmonitor.h"
 #include "libio.h"
 #include "liblog.h"
-#include "libcom.h"
 #include "libutil.h"
 
 struct monitor_t *monitor;
@@ -23,7 +23,8 @@ sem_t can_handle_communication;
 void *init_game_for_thread(void *thread_id)
 {
     log_info(monitor->log_file, "INIT GAME | THREAD=%d", thread_id);
-    while (keep_running) {
+    while (keep_running)
+    {
         struct monitor_msg_t out_msg;
         strncpy(out_msg.monitor, monitor->config->name, MAX_MONITOR_NAME);
         out_msg.thread_id = (unsigned int *)thread_id;
@@ -31,15 +32,16 @@ void *init_game_for_thread(void *thread_id)
         out_msg.guess = rand_int(1, 9);
 
         // Get available cells
-        struct node_t* available_cells = NULL;
+        struct node_t *available_cells = NULL;
         pthread_mutex_lock(&monitor_mutex);
         for (size_t i = 0; i < GRID_SIZE; i++)
         {
             // Parse current cell value as an int
             int cellval_as_int = monitor->state.problem[i] - '0';
             // The current cell is free (i.e. '0')
-            if (cellval_as_int == 0) {
-                 // Insert current index in the linked list
+            if (cellval_as_int == 0)
+            {
+                // Insert current index in the linked list
                 ll_insert(&available_cells, i);
             }
         }
@@ -48,21 +50,29 @@ void *init_game_for_thread(void *thread_id)
         int rand_index = rand_int(0, ll_size(available_cells) - 1);
         // Loop until count == rand_index to get to the value @ rand_index
         int count = 0;
-        struct node_t* current = available_cells;
+        struct node_t *current = available_cells;
         while (count != rand_index)
         {
             count++;
             current = current->next;
         }
-        
+
         out_msg.cell = (int)(current->value);
         pthread_mutex_unlock(&monitor_mutex);
-        int delay = rand_int(1000, 3000);        
+        int delay = rand_int(1000, 3000);
 
-        if (send(monitor->socket_fd, &out_msg, sizeof(struct monitor_msg_t), 0) == -1) {
+        if (send(monitor->socket_fd, &out_msg, sizeof(struct monitor_msg_t), 0) == -1)
+        {
             log_error(monitor->log_file, "SEND ERROR, EXIT PROCESS | THREAD=%u", out_msg.thread_id);
-        } else {
-            log_info(monitor->log_file, "SEND OK | THREAD=%u TYPE=MON_MSG_GUESS CELL=%u GUESS=%u DELAY=%d", out_msg.thread_id, out_msg.cell, out_msg.guess, delay);
+        }
+        else
+        {
+            log_info(monitor->log_file,
+                     "SEND OK | THREAD=%u TYPE=MON_MSG_GUESS CELL=%u GUESS=%u DELAY=%d",
+                     out_msg.thread_id,
+                     out_msg.cell,
+                     out_msg.guess,
+                     delay);
         }
 
         usleep((monitor->config->arrival_time_ms + delay) * 1000);
@@ -83,7 +93,8 @@ void spawn_threads()
     }
 }
 
-void handle_server_message(struct server_msg_t *in_msg) {
+void handle_server_message(struct server_msg_t *in_msg)
+{
     switch (in_msg->type)
     {
     case SERV_MSG_OK: // Guess was correct
@@ -94,12 +105,12 @@ void handle_server_message(struct server_msg_t *in_msg) {
         pthread_mutex_unlock(&monitor_mutex);
         log_info(monitor->log_file, "HANDLED SERVER OK | THREAD=%u", in_msg->thread_id);
         break;
-    
+
     case SERV_MSG_ERR:
         log_info(monitor->log_file, "HANDLING SERVER ERR | THREAD=%u", in_msg->thread_id);
         log_info(monitor->log_file, "HANDLED SERVER ERR | THREAD=%u", in_msg->thread_id);
         break;
-        
+
     case SERV_MSG_END:
         log_info(monitor->log_file, "HANDLING SERVER END");
         cleanup();
@@ -116,32 +127,36 @@ void handle_communication()
     while (keep_running)
     {
         struct server_msg_t in_msg;
-        if (recv(monitor->socket_fd, &in_msg, sizeof(struct server_msg_t), 0) == -1) {
+        if (recv(monitor->socket_fd, &in_msg, sizeof(struct server_msg_t), 0) == -1)
+        {
             log_error(monitor->log_file, "RECV FAIL");
-        } else {
+        }
+        else
+        {
             handle_server_message(&in_msg);
         }
     }
 }
 
-/**
- * `handle_handshake()` sends the initial message with the intent to start playing and waits for a response from the server, indicating that the threads can be spawned and, thus, guesses can be sent via the socket.
- */
-
-int handle_handshake() {
+int handle_handshake()
+{
     struct monitor_msg_t out_msg;
     strncpy(out_msg.monitor, monitor->config->name, MAX_MONITOR_NAME);
     out_msg.type = MON_MSG_INIT;
-    if (send(monitor->socket_fd, &out_msg, sizeof(struct monitor_msg_t), 0) == -1) {
+    if (send(monitor->socket_fd, &out_msg, sizeof(struct monitor_msg_t), 0) == -1)
+    {
         log_error(monitor->log_file, "SEND INIT ERROR");
         return -1;
     }
     log_info(monitor->log_file, "SEND INIT OK, WAIT RECV");
     struct server_msg_t in_msg;
-    if (recv(monitor->socket_fd, &in_msg, sizeof(struct server_msg_t), 0) == -1) {
+    if (recv(monitor->socket_fd, &in_msg, sizeof(struct server_msg_t), 0) == -1)
+    {
         log_error(monitor->log_file, "RECV INIT ERROR");
         return -1;
-    } else {
+    }
+    else
+    {
         pthread_mutex_lock(&monitor_mutex);
         strncpy(monitor->state.problem, in_msg.problem, GRID_SIZE);
         log_info(monitor->log_file, "RECV INIT OK | PROBLEM: %s", monitor->state.problem);
@@ -150,8 +165,9 @@ int handle_handshake() {
     return 0;
 }
 
-void cleanup() {
-    keep_running = 0;    
+void cleanup()
+{
+    keep_running = 0;
     clean_monitor(monitor);
     exit(EXIT_SUCCESS);
 }
@@ -209,7 +225,8 @@ int main(int argc, char *argv[])
     }
     log_info(monitor->log_file, "Connected to server");
 
-    if (handle_handshake() == -1) {
+    if (handle_handshake() == -1)
+    {
         log_error(monitor->log_file, "Failed to send init message");
         exit(EXIT_FAILURE);
     };
