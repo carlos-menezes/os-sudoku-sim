@@ -103,7 +103,7 @@ void *handle_monitor_message(void *in_msg)
             // Another thread as already modified the solution, so we do not count this as a guess but we send the list of available cells to the monitor
             out_msg.type = SERV_MSG_IGN;
             strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
-            pthread_mutex_unlock(&game_info_mutex);
+            // pthread_mutex_unlock(&game_info_mutex);
             if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0)
             {
                 log_info(server->log_file, "GUESS IGNORED | SEND FAIL");
@@ -143,9 +143,8 @@ void *handle_monitor_message(void *in_msg)
                 out_msg.type = SERV_MSG_OK;
                 // Copy the problem into the `msg->problem` buffer
                 strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
-                pthread_mutex_unlock(&game_info_mutex);
-                out_msg.thread_id = msg->thread_id;
                 // pthread_mutex_unlock(&game_info_mutex);
+                out_msg.thread_id = msg->thread_id;
                 if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0)
                 {
                     log_info(server->log_file, "GUESS OK | SEND FAIL");
@@ -187,7 +186,7 @@ void *handle_monitor_message(void *in_msg)
             {
                 monitor->priority -= 1;
             }
-            pthread_mutex_unlock(&game_info_mutex);
+            // pthread_mutex_unlock(&game_info_mutex);
             out_msg.type = SERV_MSG_ERR;
             out_msg.thread_id = msg->thread_id;
             if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0)
@@ -203,6 +202,7 @@ void *handle_monitor_message(void *in_msg)
                  "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u",
                  msg->monitor,
                  msg->guess);
+        pthread_mutex_unlock(&game_info_mutex);
         break;
     default:
         break;
@@ -381,7 +381,6 @@ void *dispatch()
 
                     current_monitor = current_monitor->next;
                 }
-                log_info(server->log_file, "priority monitor: %s", ((struct monitor_state_t *)(priority_monitor->value))->monitor);
                 pthread_mutex_unlock(&game_info_mutex);
                 
                 // Loop through list of messages and find the first message of the monitor with most priority
