@@ -18,7 +18,6 @@ struct monitor_msg_t
     unsigned int type;
     unsigned int guess;
     unsigned int cell;
-    unsigned int priority;
     char monitor[MAX_MONITOR_NAME];
     unsigned int thread_id;
     unsigned int socket_fd;
@@ -38,7 +37,6 @@ struct server_msg_t
 {
     unsigned int type;
     unsigned int thread_id;
-    unsigned int guess; // TODO: remove?
     char problem[GRID_SIZE + 1];
 };
 #pragma pack(0)

@@ -116,6 +116,14 @@ void handle_server_message(struct server_msg_t *in_msg)
         cleanup();
         log_info(monitor->log_file, "HANDLED SERVER END");
         break;
+
+    case SERV_MSG_IGN:
+        log_info(monitor->log_file, "HANDLING SERVER IGN");
+        // Must mutate state with new problem
+        pthread_mutex_lock(&monitor_mutex);
+        strncpy(monitor->state.problem, in_msg->problem, GRID_SIZE);
+        pthread_mutex_unlock(&monitor_mutex);
+        log_info(monitor->log_file, "HANDLED SERVER IGN");
     default:
         break;
     }
