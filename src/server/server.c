@@ -52,9 +52,8 @@ void init_game_state(struct game_state_t *state)
     }
 }
 
-void *handle_monitor_message(void *in_msg)
+void handle_monitor_message(struct monitor_msg_t *msg)
 {
-    struct monitor_msg_t *msg = in_msg;
     struct server_msg_t out_msg;
     switch (msg->type)
     {
@@ -67,10 +66,8 @@ void *handle_monitor_message(void *in_msg)
         state->guesses = 0;
         state->correct_guesses = 0;
         state->priority = BASE_PRIORITY;
-        pthread_mutex_lock(&game_info_mutex);
         ll_insert(&(game_info.states), state);
         strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
-        pthread_mutex_unlock(&game_info_mutex);
         out_msg.type = SERV_MSG_OK;
         if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0)
         {
@@ -80,6 +77,7 @@ void *handle_monitor_message(void *in_msg)
         {
             log_info(server->log_file, "HANDLED MESSAGE, SEND FAIL | MONITOR=%s TYPE=MON_MSG_INIT", msg->monitor);
         }
+        ll_delete_value(&init_requests, msg);
         break;
     case MON_MSG_GUESS:
         log_info(server->log_file,
@@ -87,33 +85,53 @@ void *handle_monitor_message(void *in_msg)
                  msg->monitor,
                  msg->guess,
                  msg->cell);
-        pthread_mutex_lock(&game_info_mutex);
         // Find the sender in the states list
-        struct node_t *cur = game_info.states;
-        while (strcmp(msg->monitor, ((struct monitor_state_t *)(cur->value))->monitor) != 0)
+        struct node_t *current_monitor = game_info.states;
+        while (strcmp(msg->monitor, ((struct monitor_state_t *)(current_monitor->value))->monitor) != 0)
         {
-            cur = cur->next;
+            current_monitor = current_monitor->next;
         }
-        struct monitor_state_t *monitor = (struct monitor_state_t *)(cur->value);
-        pthread_mutex_lock(&(game_info.cell_mutex[msg->cell]));
+        struct monitor_state_t *monitor = (struct monitor_state_t *)(current_monitor->value);
         int solution = game_info.grid.solution[msg->cell] - '0';
         int problem = game_info.grid.problem[msg->cell] - '0';
-        pthread_mutex_unlock(&(game_info.cell_mutex[msg->cell]));
-        if (problem != 0) {
-            // Another thread as already modified the solution, so we do not count this as a guess but we send the list of available cells to the monitor
+        if (problem != 0)
+        {
+            // Although this message is not considered as a guess (i.e. no effect on number of guesses), we send the list of available cells to the monitor so further requests don't send requests to this cell
             out_msg.type = SERV_MSG_IGN;
             strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
-            // pthread_mutex_unlock(&game_info_mutex);
             if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0)
             {
-                log_info(server->log_file, "GUESS IGNORED | SEND FAIL");
+                log_error(server->log_file, "GUESS IGNORED | SEND FAIL");
             }
             else
             {
                 log_info(server->log_file, "GUESS IGNORED | SEND OK");
             }
+
+            // Another request as already solved the solution
+            // Discard every msg where msg->cell == cell
+            struct node_t *current_message = requests;
+            while (current_message != NULL)
+            {
+                if (!(current_message != msg))
+                    continue;
+
+                int cell = ((struct monitor_msg_t *)(current_message->value))->cell;
+                if (cell == msg->cell)
+                {
+                    ll_delete_value(&requests, current_message->value);
+                    current_message = requests;
+                }
+                else
+                {
+                    current_message = current_message->next;
+                }
+            }
+            ll_delete_value(&requests, msg);
+            break;
         }
         // Create outgoing message
+        // else if (solution == msg->guess)
         else if (solution == msg->guess)
         {
             monitor->guesses += 1;
@@ -127,9 +145,9 @@ void *handle_monitor_message(void *in_msg)
             int empty_cells = 0;
             for (size_t i = 0; i < GRID_SIZE; i++)
             {
-                pthread_mutex_lock(&(game_info.cell_mutex[i]));
+                // pthread_mutex_lock(&(game_info.cell_mutex[i]));
                 int cellval_as_int = game_info.grid.problem[i] - '0';
-                pthread_mutex_unlock(&(game_info.cell_mutex[i]));
+                // pthread_mutex_unlock(&(game_info.cell_mutex[i]));
                 if (cellval_as_int == 0)
                 {
                     empty_cells = 1;
@@ -159,23 +177,6 @@ void *handle_monitor_message(void *in_msg)
                 out_msg.type = SERV_MSG_END;
                 log_info(server->log_file, "ENDING GAME");
                 // Send the SERV_MSG_END message to every monitor
-                struct node_t *current = game_info.states;
-                while (current != NULL)
-                {
-                    struct monitor_state_t *state = current->value;
-                    send(state->socket_fd, &out_msg, sizeof(struct server_msg_t), 0);
-
-                    // Show stats for this monitor
-                    log_info(server->log_file,
-                             "MONITOR=%s PLAYS=%u CORRECT=%u RATIO=%.2f",
-                             state->monitor,
-                             state->guesses,
-                             state->correct_guesses,
-                             state->guesses - state->correct_guesses,
-                             (float)(state->correct_guesses) / (float)(state->guesses));
-
-                    current = current->next;
-                }
                 cleanup(); // exit point
             }
         }
@@ -199,16 +200,15 @@ void *handle_monitor_message(void *in_msg)
             }
         }
         log_info(server->log_file,
-                 "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u",
+                 "HANDLED MESSAGE | MONITOR=%s TYPE=MON_MSG_GUESS GUESS=%u CELL=%u",
                  msg->monitor,
-                 msg->guess);
-        pthread_mutex_unlock(&game_info_mutex);
+                 msg->guess,
+                 msg->cell);
+        ll_delete_value(&requests, msg);
         break;
     default:
         break;
     }
-
-    pthread_exit(NULL);
 }
 
 /**
@@ -346,7 +346,6 @@ void *dispatch()
             {
                 struct monitor_msg_t *msg = (struct monitor_msg_t *)(init_requests->value);
                 handle_monitor_message(msg);
-                ll_delete_value(&init_requests, init_requests->value);
                 pthread_mutex_unlock(&init_requests_mutex);
                 continue;
             }
@@ -381,8 +380,7 @@ void *dispatch()
 
                     current_monitor = current_monitor->next;
                 }
-                pthread_mutex_unlock(&game_info_mutex);
-                
+
                 // Loop through list of messages and find the first message of the monitor with most priority
                 struct node_t *current_message = requests;
                 while (current_message != NULL)
@@ -398,18 +396,17 @@ void *dispatch()
 
                 // If there are no messages from the monitor with most priority, just process the message on top of the queue
                 // There's not enough time to implement everything
-                if (current_message == NULL) {
+                if (current_message == NULL)
+                {
                     current_message = requests;
-                } else {
+                }
+                else
+                {
                     ((struct monitor_state_t *)(priority_monitor->value))->last_checked = 1;
                 }
-                // Handle the message in a separate thread
                 struct monitor_msg_t *msg = (struct monitor_msg_t *)(current_message->value);
-                pthread_t handler_thread;
-                pthread_create(&handler_thread, NULL, handle_monitor_message, (void *)msg);
-                // pthread_join(handler_thread, NULL);
-                // handle_monitor_message(msg);
-                ll_delete_value(&requests, requests->value);
+                handle_monitor_message(msg);
+                pthread_mutex_unlock(&game_info_mutex);
                 pthread_mutex_unlock(&requests_mutex);
                 continue;
             }
@@ -465,6 +462,26 @@ void handle_communication()
 
 void cleanup()
 {
+    struct node_t *current = game_info.states;
+    struct server_msg_t out_msg;
+    out_msg.type = SERV_MSG_END;
+    while (current != NULL)
+    {
+        struct monitor_state_t *state = current->value;
+        send(state->socket_fd, &out_msg, sizeof(struct server_msg_t), 0);
+
+        // Show stats for this monitor
+        log_info(server->log_file,
+                 "MONITOR=%s PLAYS=%u CORRECT=%u RATIO=%.2f",
+                 state->monitor,
+                 state->guesses,
+                 state->correct_guesses,
+                 state->guesses - state->correct_guesses,
+                 (float)(state->correct_guesses) / (float)(state->guesses));
+
+        current = current->next;
+    }
+
     keep_running = 0;
     clean_server(server);
     exit(EXIT_SUCCESS);

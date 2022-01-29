@@ -34,7 +34,6 @@ void handle_communication();
 void *dispatch();
 void *init_dispatch();
 void *handle_monitor(void *socket_fd);
-void *handle_monitor_message(void *in_msg);
 void cleanup();
 
 #endif
