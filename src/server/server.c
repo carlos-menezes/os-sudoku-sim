@@ -165,7 +165,7 @@ void handle_monitor_message(struct monitor_msg_t *msg)
                 out_msg.thread_id = msg->thread_id;
                 if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0)
                 {
-                    log_info(server->log_file, "GUESS OK | SEND FAIL");
+                    log_error(server->log_file, "GUESS OK | SEND FAIL");
                 }
                 else
                 {
@@ -192,7 +192,7 @@ void handle_monitor_message(struct monitor_msg_t *msg)
             out_msg.thread_id = msg->thread_id;
             if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0)
             {
-                log_info(server->log_file, "GUESS ERROR | SEND FAIL");
+                log_error(server->log_file, "GUESS ERROR | SEND FAIL");
             }
             else
             {
