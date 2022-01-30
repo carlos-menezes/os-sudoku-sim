@@ -42,6 +42,7 @@ int initialize_server(struct server_t **server)
     (*server)->config->dispatch_batch = DEFAULT_DISPATCH_BATCH;
     (*server)->config->min_monitors = DEFAULT_MIN_MONITORS;
     (*server)->config->socket_backlog = DEFAULT_SOCKET_BACKLOG;
+    (*server)->config->priority_increase = DEFAULT_PRIORITY_INCREASE;
 
     // Create log file
     char *log_name = malloc(8 /* "MONITOR_" LENGTH */ + 10 /* TIMESTAMP LENGTH IN SEC. */ + 4 /* ".log" LENGTH */);
@@ -97,6 +98,12 @@ void parse_server_config(char *buffer, struct server_t **server)
         }
 
         if (sscanf(line, "dispatch_batch = %d", &(*server)->config->dispatch_batch))
+        {
+            line = strtok(NULL, "\n");
+            continue;
+        }
+
+        if (sscanf(line, "priority_increase = %d", &(*server)->config->priority_increase))
         {
             line = strtok(NULL, "\n");
             continue;

@@ -135,7 +135,7 @@ void handle_monitor_message(struct monitor_msg_t *msg)
         else if (solution == msg->guess)
         {
             monitor->guesses += 1;
-            monitor->priority += 1;
+            monitor->priority += server->config->priority_increase;
             // Guess is correct
             monitor->correct_guesses += 1;
             // Modify the problem string with the guess
@@ -161,7 +161,6 @@ void handle_monitor_message(struct monitor_msg_t *msg)
                 out_msg.type = SERV_MSG_OK;
                 // Copy the problem into the `msg->problem` buffer
                 strncpy(out_msg.problem, game_info.grid.problem, GRID_SIZE);
-                // pthread_mutex_unlock(&game_info_mutex);
                 out_msg.thread_id = msg->thread_id;
                 if (send(msg->socket_fd, &out_msg, sizeof(struct server_msg_t), 0) <= 0)
                 {
@@ -398,10 +397,12 @@ void *dispatch()
                 // There's not enough time to implement everything
                 if (current_message == NULL)
                 {
+                    log_info(server->log_file, "current message is null, processing head");
                     current_message = requests;
                 }
                 else
                 {
+                    log_info(server->log_file, "priority monitor: %s || priority: %d", ((struct monitor_state_t *)(priority_monitor->value))->monitor, ((struct monitor_state_t *)(priority_monitor->value))->priority);
                     ((struct monitor_state_t *)(priority_monitor->value))->last_checked = 1;
                 }
                 struct monitor_msg_t *msg = (struct monitor_msg_t *)(current_message->value);

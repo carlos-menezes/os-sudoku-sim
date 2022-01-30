@@ -28,6 +28,7 @@ Log files and executables can be cleared with `make clean`.
 | `socket_backlog` 	| `int` 	| Limit the number of incoming connect requests the server will retain in a queue assuming it can serve the current request and the small amount of queued pending requests in a reasonable amount of time while under high load 	|
 | `min_monitors`   	| `int` 	| Minimum amount of monitors needed to connect before the simulation starts                                                                                                                                                      	|
 | `dispatch_batch` 	| `int` 	| Number of requests processed each time the `dispatch` thread is called                                                                                                                                                         	|
+| `priority_increase` | `int`   | Priority increase everytime a request is successful                                                                                                                                                       |
 
 ### Monitor
 

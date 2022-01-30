@@ -10,6 +10,7 @@
 #define DEFAULT_SOCKET_BACKLOG 20
 #define DEFAULT_MIN_MONITORS 1
 #define DEFAULT_DISPATCH_BATCH 5
+#define DEFAULT_PRIORITY_INCREASE 5 
 
 // Server configurations
 struct server_config_t
@@ -17,6 +18,7 @@ struct server_config_t
     int socket_backlog;
     int min_monitors;
     int dispatch_batch;
+    int priority_increase;
 };
 
 // Server log, configurations, grids, socket and socket address
